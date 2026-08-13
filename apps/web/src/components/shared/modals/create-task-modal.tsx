@@ -62,6 +62,7 @@ type CreateTaskModalProps = {
 };
 
 type Priority = "no-priority" | "low" | "medium" | "high" | "urgent";
+type WorkItemType = "task" | "epic" | "sub_epic";
 
 type LabelColor =
   | "gray"
@@ -94,6 +95,7 @@ function normalizeTask(
     number: task.number ?? null,
     description: task.description ?? null,
     priority: task.priority ?? null,
+    workItemType: task.workItemType ?? "task",
     startDate: task.startDate ?? null,
     dueDate: task.dueDate ?? null,
     position: task.position ?? 0,
@@ -185,6 +187,7 @@ function CreateTaskModal({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("no-priority");
+  const [workItemType, setWorkItemType] = useState<WorkItemType>("task");
   const [assigneeId, setAssigneeId] = useState("");
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
@@ -247,6 +250,7 @@ function CreateTaskModal({
     setTitle("");
     setDescription("");
     setPriority("no-priority");
+    setWorkItemType("task");
     setAssigneeId("");
     setStartDate(undefined);
     setDueDate(undefined);
@@ -344,6 +348,7 @@ function CreateTaskModal({
       description: description.trim() || "",
       userId: assigneeId,
       priority,
+      workItemType,
       projectId: resolvedProjectId,
       startDate: startDate ? startDate.toISOString() : undefined,
       dueDate: dueDate ? dueDate.toISOString() : undefined,
@@ -374,6 +379,7 @@ function CreateTaskModal({
     startDate,
     dueDate,
     priority,
+    workItemType,
     resolvedProjectId,
     title,
     t,
@@ -396,6 +402,7 @@ function CreateTaskModal({
               userId: assigneeId || null,
               status: taskStatus,
               priority,
+              workItemType,
               startDate: startDate ? startDate.toISOString() : null,
               dueDate: dueDate ? dueDate.toISOString() : null,
               projectId: resolvedProjectId,
@@ -407,6 +414,7 @@ function CreateTaskModal({
               description: description.trim() || "",
               userId: assigneeId,
               priority,
+              workItemType,
               projectId: resolvedProjectId,
               startDate: startDate ? startDate.toISOString() : undefined,
               dueDate: dueDate ? dueDate.toISOString() : undefined,
@@ -439,6 +447,7 @@ function CreateTaskModal({
         setTitle("");
         setDescription("");
         setPriority("no-priority");
+        setWorkItemType("task");
         setAssigneeId("");
         setStartDate(undefined);
         setDueDate(undefined);
@@ -721,6 +730,19 @@ function CreateTaskModal({
                 <div className="w-1.5 h-1.5 bg-foreground rounded-full" />
                 {statusLabel}
               </div>
+
+              <select
+                aria-label="Work item type"
+                value={workItemType}
+                onChange={(event) =>
+                  setWorkItemType(event.target.value as WorkItemType)
+                }
+                className="h-8 rounded-md border border-border bg-background px-2 text-xs font-medium"
+              >
+                <option value="task">Task</option>
+                <option value="epic">Epic</option>
+                <option value="sub_epic">Sub-epic</option>
+              </select>
 
               <Popover>
                 <PopoverTrigger asChild>

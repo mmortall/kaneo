@@ -7,6 +7,7 @@ import {
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { assertSubtaskRelationAllowed } from "../work-item-hierarchy";
 
 async function createTaskRelation({
   sourceTaskId,
@@ -31,6 +32,7 @@ async function createTaskRelation({
     .select({
       id: taskTable.id,
       projectId: taskTable.projectId,
+      workItemType: taskTable.workItemType,
       workspaceId: projectTable.workspaceId,
     })
     .from(taskTable)
@@ -51,6 +53,7 @@ async function createTaskRelation({
     .select({
       id: taskTable.id,
       projectId: taskTable.projectId,
+      workItemType: taskTable.workItemType,
       workspaceId: projectTable.workspaceId,
     })
     .from(taskTable)
@@ -65,6 +68,10 @@ async function createTaskRelation({
 
   if (!targetTask) {
     throw new HTTPException(404, { message: "Target task not found" });
+  }
+
+  if (relationType === "subtask") {
+    await assertSubtaskRelationAllowed(sourceTask, targetTask);
   }
 
   const existing = await db

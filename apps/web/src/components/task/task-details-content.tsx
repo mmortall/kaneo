@@ -45,6 +45,10 @@ export default function TaskDetailsContent({
     (rel) => rel.relationType === "subtask" && rel.targetTaskId === taskId,
   );
   const parentTask = parentRelation?.sourceTask;
+  const parentWorkItemType =
+    task?.workItemType === "epic" || task?.workItemType === "sub_epic"
+      ? task.workItemType
+      : "task";
 
   if (!taskId) return null;
 
@@ -76,6 +80,11 @@ export default function TaskDetailsContent({
         <p className="text-xs font-semibold text-foreground/70">
           {project?.slug}-{task?.number}
         </p>
+        {task && task.workItemType && task.workItemType !== "task" && (
+          <span className="w-fit rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+            {task.workItemType === "epic" ? "Epic" : "Sub-epic"}
+          </span>
+        )}
         <TaskTitle taskId={taskId} />
         <TaskDescription taskId={taskId} />
       </div>
@@ -94,6 +103,7 @@ export default function TaskDetailsContent({
             projectId={projectId}
             workspaceId={workspaceId}
             parentStatus={task.status}
+            parentWorkItemType={parentWorkItemType}
           />
         )}
       </div>

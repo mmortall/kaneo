@@ -22,6 +22,7 @@ type Task = {
   description: string | null;
   status: string;
   priority: string | null;
+  workItemType?: string;
   startDate: string | null;
   dueDate: string | null;
   position: number | null;

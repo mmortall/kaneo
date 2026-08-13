@@ -1,10 +1,11 @@
-import { and, asc, eq, max } from "drizzle-orm";
+import { and, asc, eq, max, or } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
   assetTable,
   columnTable,
   projectTable,
+  taskRelationTable,
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
@@ -97,6 +98,26 @@ async function moveTask({
   if (!existingTask) {
     throw new HTTPException(404, {
       message: "Task not found",
+    });
+  }
+
+  const [hierarchyRelation] = await db
+    .select({ id: taskRelationTable.id })
+    .from(taskRelationTable)
+    .where(
+      and(
+        eq(taskRelationTable.relationType, "subtask"),
+        or(
+          eq(taskRelationTable.sourceTaskId, taskId),
+          eq(taskRelationTable.targetTaskId, taskId),
+        ),
+      ),
+    )
+    .limit(1);
+
+  if (hierarchyRelation) {
+    throw new HTTPException(409, {
+      message: "Remove the hierarchy relation before moving this work item",
     });
   }
 

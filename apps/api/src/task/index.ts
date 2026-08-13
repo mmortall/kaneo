@@ -90,6 +90,7 @@ const task = new Hono<{
           sortOrder: v.optional(v.picklist(["asc", "desc"])),
           dueBefore: v.optional(v.string()),
           dueAfter: v.optional(v.string()),
+          workItemType: v.optional(v.picklist(["task", "epic", "sub_epic"])),
         }),
       ),
     ),
@@ -197,6 +198,7 @@ const task = new Hono<{
         priority: v.picklist(VALID_PRIORITIES),
         status: v.string(),
         userId: v.optional(v.string()),
+        workItemType: v.optional(v.picklist(["task", "epic", "sub_epic"])),
       }),
     ),
     workspaceAccess.fromProject("projectId"),
@@ -212,6 +214,7 @@ const task = new Hono<{
         priority,
         status,
         userId,
+        workItemType,
       } = c.req.valid("json");
 
       const parsedStartDate =
@@ -235,6 +238,7 @@ const task = new Hono<{
         dueDate: parsedDueDate,
         priority,
         status,
+        workItemType,
       });
 
       return c.json(task);
@@ -342,6 +346,7 @@ const task = new Hono<{
         projectId: v.string(),
         position: v.number(),
         userId: v.optional(v.string()),
+        workItemType: v.optional(v.picklist(["task", "epic", "sub_epic"])),
       }),
     ),
     workspaceAccess.fromTask(),
@@ -360,6 +365,7 @@ const task = new Hono<{
         projectId,
         position,
         userId,
+        workItemType,
       } = c.req.valid("json");
 
       const currentUserId = c.get("userId");
@@ -386,6 +392,7 @@ const task = new Hono<{
         priority,
         position,
         userId,
+        workItemType,
         currentUserId,
       );
 

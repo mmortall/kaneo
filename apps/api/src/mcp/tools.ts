@@ -63,6 +63,7 @@ function run(fn: () => Promise<unknown>): Promise<CallToolResult> {
 }
 
 const PRIORITIES = ["no-priority", "low", "medium", "high", "urgent"] as const;
+const WORK_ITEM_TYPES = ["task", "epic", "sub_epic"] as const;
 
 function isTaskPriority(v: string): v is (typeof PRIORITIES)[number] {
   return (PRIORITIES as readonly string[]).includes(v);
@@ -130,6 +131,12 @@ function buildFullTaskUpdateBody(
         ? existing.userId
         : undefined;
 
+  const workItemType =
+    (patch.workItemType as string) ??
+    (typeof existing.workItemType === "string"
+      ? existing.workItemType
+      : undefined);
+
   const startDate = formatOptionalIso(
     patch.startDate !== undefined ? patch.startDate : existing.startDate,
   );
@@ -148,6 +155,7 @@ function buildFullTaskUpdateBody(
   if (startDate !== undefined) body.startDate = startDate;
   if (dueDate !== undefined) body.dueDate = dueDate;
   if (userId !== undefined) body.userId = userId;
+  if (workItemType !== undefined) body.workItemType = workItemType;
   return body;
 }
 
@@ -158,6 +166,7 @@ const prioritySchema = z.enum([
   "high",
   "urgent",
 ]);
+const workItemTypeSchema = z.enum(WORK_ITEM_TYPES);
 const nonEmptyString = z.string().trim().min(1);
 const optionalNonEmptyString = nonEmptyString.optional();
 const nullableOptionalNonEmptyString = nonEmptyString.nullable().optional();
@@ -335,6 +344,7 @@ export function registerMcpTools(
         sortOrder: z.enum(["asc", "desc"]).optional(),
         dueBefore: optionalIsoDateTimeSchema,
         dueAfter: optionalIsoDateTimeSchema,
+        workItemType: workItemTypeSchema.optional(),
       }),
     },
     async (args) => {
@@ -380,6 +390,7 @@ export function registerMcpTools(
         startDate: optionalIsoDateTimeSchema,
         dueDate: optionalIsoDateTimeSchema,
         userId: optionalNonEmptyString,
+        workItemType: workItemTypeSchema.optional(),
       }),
     },
     async (args) => {
@@ -392,6 +403,8 @@ export function registerMcpTools(
       if (args.startDate !== undefined) body.startDate = args.startDate;
       if (args.dueDate !== undefined) body.dueDate = args.dueDate;
       if (args.userId !== undefined) body.userId = args.userId;
+      if (args.workItemType !== undefined)
+        body.workItemType = args.workItemType;
       return run(() =>
         client.json(`/api/task/${encodeURIComponent(args.projectId)}`, {
           method: "POST",
@@ -417,6 +430,7 @@ export function registerMcpTools(
         startDate: nullableOptionalIsoDateTimeSchema,
         dueDate: nullableOptionalIsoDateTimeSchema,
         userId: nullableOptionalNonEmptyString,
+        workItemType: workItemTypeSchema.optional(),
       }),
     },
     async (args) => {

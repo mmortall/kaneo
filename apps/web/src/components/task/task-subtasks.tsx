@@ -39,6 +39,7 @@ type TaskSubtasksProps = {
   projectId: string;
   workspaceId: string;
   parentStatus: string;
+  parentWorkItemType?: "task" | "epic" | "sub_epic";
 };
 
 export default function TaskSubtasks({
@@ -46,6 +47,7 @@ export default function TaskSubtasks({
   projectId,
   workspaceId,
   parentStatus,
+  parentWorkItemType = "task",
 }: TaskSubtasksProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -77,7 +79,8 @@ export default function TaskSubtasks({
   const doneSlug = columns.find((c) => c.isFinal)?.slug ?? "done";
   const todoSlug = columns.find((c) => !c.isFinal)?.slug;
   const canCreateSubtask =
-    parentStatus === "planned" || (!isLoadingColumns && Boolean(todoSlug));
+    parentWorkItemType !== "task" &&
+    (parentStatus === "planned" || (!isLoadingColumns && Boolean(todoSlug)));
   const isCompleted = (status: string) =>
     columns.length > 0
       ? (columns.find((c) => c.slug === status)?.isFinal ?? false)
@@ -269,6 +272,7 @@ export default function TaskSubtasks({
         projectId,
         status: initialStatus,
         priority: "no-priority",
+        workItemType: parentWorkItemType === "epic" ? "sub_epic" : "task",
       });
 
       await createRelation.mutateAsync({

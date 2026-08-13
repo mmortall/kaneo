@@ -16,6 +16,7 @@ function useCreateTask() {
       startDate,
       dueDate,
       priority,
+      workItemType,
     }: CreateTaskRequest) =>
       createTask(
         title,
@@ -26,6 +27,7 @@ function useCreateTask() {
         startDate ? new Date(startDate) : undefined,
         dueDate ? new Date(dueDate) : undefined,
         priority,
+        workItemType,
       ),
     onSuccess: (_data, variables) => {
       void queryClient.invalidateQueries({

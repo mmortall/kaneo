@@ -37,6 +37,7 @@ export const taskSchema = v.object({
     "high",
     "urgent",
   ] as const),
+  workItemType: v.picklist(["task", "epic", "sub_epic"] as const),
   startDate: v.optional(v.date()),
   dueDate: v.optional(v.date()),
   createdAt: v.date(),

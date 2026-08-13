@@ -79,6 +79,7 @@ describe("TaskSubtasks", () => {
         projectId="project-1"
         workspaceId="workspace-1"
         parentStatus="planned"
+        parentWorkItemType="epic"
       />,
     );
 
@@ -97,7 +98,7 @@ describe("TaskSubtasks", () => {
 
     await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
     expect(mocks.createTask).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "planned" }),
+      expect.objectContaining({ status: "planned", workItemType: "sub_epic" }),
     );
   });
 
@@ -111,6 +112,7 @@ describe("TaskSubtasks", () => {
         projectId="project-1"
         workspaceId="workspace-1"
         parentStatus="in-progress"
+        parentWorkItemType="sub_epic"
       />,
     );
 
@@ -129,7 +131,7 @@ describe("TaskSubtasks", () => {
 
     await waitFor(() => expect(mocks.createTask).toHaveBeenCalledTimes(1));
     expect(mocks.createTask).toHaveBeenCalledWith(
-      expect.objectContaining({ status: "to-do" }),
+      expect.objectContaining({ status: "to-do", workItemType: "task" }),
     );
   });
 
@@ -142,6 +144,25 @@ describe("TaskSubtasks", () => {
         projectId="project-1"
         workspaceId="workspace-1"
         parentStatus="in-progress"
+        parentWorkItemType="epic"
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", {
+        name: "tasks:subtasks.addAction tasks:subtasks.title",
+      }),
+    ).toBeDisabled();
+  });
+
+  it("does not allow an ordinary task to create hierarchy children", () => {
+    render(
+      <TaskSubtasks
+        taskId="parent-4"
+        projectId="project-1"
+        workspaceId="workspace-1"
+        parentStatus="in-progress"
+        parentWorkItemType="task"
       />,
     );
 

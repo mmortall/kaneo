@@ -260,6 +260,20 @@
 			"when": 1785921085773,
 			"tag": "0036_strong_pandemic",
 			"breakpoints": true
+		},
+		{
+			"idx": 37,
+			"version": "7",
+			"when": 1786600000000,
+			"tag": "0037_epic_work_item_hierarchy",
+			"breakpoints": true
+		},
+		{
+			"idx": 38,
+			"version": "7",
+			"when": 1786611815713,
+			"tag": "0038_chilly_iron_patriot",
+			"breakpoints": true
 		}
 	]
 }

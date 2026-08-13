@@ -236,6 +236,11 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
             )}
 
             <div className="mb-2.5 pr-6">
+              {task.workItemType && task.workItemType !== "task" && (
+                <span className="mb-1 inline-flex rounded border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                  {task.workItemType === "epic" ? "Epic" : "Sub-epic"}
+                </span>
+              )}
               <div
                 className="overflow-hidden break-words text-sm leading-5 font-medium text-foreground/95"
                 style={{

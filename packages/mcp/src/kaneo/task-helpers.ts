@@ -1,6 +1,7 @@
 const PRIORITIES = ["no-priority", "low", "medium", "high", "urgent"] as const;
 
 export type TaskPriority = (typeof PRIORITIES)[number];
+export type WorkItemType = "task" | "epic" | "sub_epic";
 
 export function isTaskPriority(v: string): v is TaskPriority {
   return (PRIORITIES as readonly string[]).includes(v);
@@ -16,6 +17,7 @@ export type TaskUpdatePatch = {
   startDate?: string | null;
   dueDate?: string | null;
   userId?: string | null;
+  workItemType?: WorkItemType;
 };
 
 /**
@@ -90,6 +92,11 @@ export function buildFullTaskUpdateBody(
   const startDate = formatOptionalIso(
     patch.startDate !== undefined ? patch.startDate : existing.startDate,
   );
+  const workItemType =
+    patch.workItemType ??
+    (typeof existing.workItemType === "string"
+      ? existing.workItemType
+      : undefined);
   const dueDate = formatOptionalIso(
     patch.dueDate !== undefined ? patch.dueDate : existing.dueDate,
   );
@@ -111,6 +118,9 @@ export function buildFullTaskUpdateBody(
   }
   if (userId !== undefined) {
     body.userId = userId;
+  }
+  if (workItemType !== undefined) {
+    body.workItemType = workItemType;
   }
 
   return body;

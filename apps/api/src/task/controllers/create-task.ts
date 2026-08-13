@@ -16,6 +16,7 @@ async function createTask({
   dueDate,
   description,
   priority,
+  workItemType,
 }: {
   projectId: string;
   currentUserId: string;
@@ -26,6 +27,7 @@ async function createTask({
   dueDate?: Date;
   description?: string;
   priority?: string;
+  workItemType?: "task" | "epic" | "sub_epic";
 }) {
   const resolvedStatus = status || "to-do";
   const resolvedPriority = priority || "no-priority";
@@ -73,6 +75,7 @@ async function createTask({
         dueDate: dueDate || null,
         description: description || "",
         priority: resolvedPriority,
+        workItemType: workItemType ?? "task",
         number: taskNumber,
         position: nextPosition,
       })

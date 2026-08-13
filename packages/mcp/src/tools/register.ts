@@ -12,6 +12,7 @@ const prioritySchema = z.enum([
   "high",
   "urgent",
 ]);
+const workItemTypeSchema = z.enum(["task", "epic", "sub_epic"]);
 
 const nonEmptyString = z.string().trim().min(1);
 const optionalNonEmptyString = nonEmptyString.optional();
@@ -198,6 +199,7 @@ export function registerTools(
     sortOrder: z.enum(["asc", "desc"]).optional(),
     dueBefore: optionalIsoDateTimeSchema,
     dueAfter: optionalIsoDateTimeSchema,
+    workItemType: workItemTypeSchema.optional(),
   });
 
   server.registerTool(
@@ -248,6 +250,7 @@ export function registerTools(
         startDate: optionalIsoDateTimeSchema,
         dueDate: optionalIsoDateTimeSchema,
         userId: optionalNonEmptyString,
+        workItemType: workItemTypeSchema.optional(),
       }),
     },
     async (args) => {
@@ -265,6 +268,9 @@ export function registerTools(
       }
       if (args.userId !== undefined) {
         body.userId = args.userId;
+      }
+      if (args.workItemType !== undefined) {
+        body.workItemType = args.workItemType;
       }
       return run(() =>
         client.json(`/api/task/${encodeURIComponent(args.projectId)}`, {
@@ -286,6 +292,7 @@ export function registerTools(
     startDate: nullableOptionalIsoDateTimeSchema,
     dueDate: nullableOptionalIsoDateTimeSchema,
     userId: nullableOptionalNonEmptyString,
+    workItemType: workItemTypeSchema.optional(),
   });
 
   server.registerTool(

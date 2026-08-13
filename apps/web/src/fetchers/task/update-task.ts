@@ -7,6 +7,10 @@ type UpdateTaskPriority = InferRequestType<
 >["json"]["priority"];
 
 async function updateTask(taskId: string, task: Task) {
+  const workItemType =
+    task.workItemType === "epic" || task.workItemType === "sub_epic"
+      ? task.workItemType
+      : "task";
   const response = await client.task[":id"].$put({
     param: { id: taskId },
     json: {
@@ -19,6 +23,7 @@ async function updateTask(taskId: string, task: Task) {
       dueDate: task.dueDate?.toString(),
       position: task.position ?? 0,
       projectId: task.projectId,
+      workItemType,
     },
   });
 

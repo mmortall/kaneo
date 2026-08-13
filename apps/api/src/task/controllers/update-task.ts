@@ -4,6 +4,10 @@ import db from "../../database";
 import { columnTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
+import {
+  assertWorkItemTypeChangeAllowed,
+  type WorkItemType,
+} from "../../task-relation/work-item-hierarchy";
 import { assertValidTaskStatus } from "../validate-task-fields";
 
 async function updateTask(
@@ -17,6 +21,7 @@ async function updateTask(
   priority: string,
   position: number,
   userId?: string,
+  workItemType?: WorkItemType,
   currentUserId?: string,
 ) {
   const [existingTask] = await db
@@ -25,6 +30,7 @@ async function updateTask(
       description: taskTable.description,
       status: taskTable.status,
       projectId: taskTable.projectId,
+      workItemType: taskTable.workItemType,
     })
     .from(taskTable)
     .where(eq(taskTable.id, id))
@@ -43,6 +49,12 @@ async function updateTask(
   }
 
   await assertValidTaskStatus(status, projectId);
+
+  const resolvedWorkItemType =
+    workItemType ?? (existingTask.workItemType as WorkItemType);
+  if (resolvedWorkItemType !== existingTask.workItemType) {
+    await assertWorkItemTypeChangeAllowed(id, resolvedWorkItemType);
+  }
 
   const column = await db.query.columnTable.findFirst({
     where: and(
@@ -64,6 +76,7 @@ async function updateTask(
       priority,
       position,
       userId: userId || null,
+      workItemType: resolvedWorkItemType,
     })
     .where(eq(taskTable.id, id))
     .returning();

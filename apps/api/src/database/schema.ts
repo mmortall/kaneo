@@ -381,6 +381,7 @@ export const taskTable = pgTable(
       onUpdate: "cascade",
     }),
     priority: text("priority").default("low"),
+    workItemType: text("work_item_type").notNull().default("task"),
     startDate: timestamp("start_date", { mode: "date" }),
     dueDate: timestamp("due_date", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -394,6 +395,7 @@ export const taskTable = pgTable(
     index("task_dueDate_idx").on(table.dueDate),
     index("task_assigneeId_idx").on(table.userId),
     index("task_columnId_idx").on(table.columnId),
+    index("task_workItemType_idx").on(table.workItemType),
     unique("task_project_number_unique").on(table.projectId, table.number),
   ],
 );
@@ -899,6 +901,14 @@ export const taskRelationTable = pgTable(
   (table) => [
     index("task_relation_source_idx").on(table.sourceTaskId),
     index("task_relation_target_idx").on(table.targetTaskId),
+    index("task_relation_type_source_idx").on(
+      table.relationType,
+      table.sourceTaskId,
+    ),
+    index("task_relation_type_target_idx").on(
+      table.relationType,
+      table.targetTaskId,
+    ),
   ],
 );
 

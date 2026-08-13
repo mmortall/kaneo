@@ -27,6 +27,7 @@ type GetTasksOptions = {
   limit?: number;
   page?: number;
   priority?: string;
+  workItemType?: "task" | "epic" | "sub_epic";
   sortBy?:
     | "createdAt"
     | "priority"
@@ -89,6 +90,10 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     conditions.push(eq(taskTable.priority, options.priority));
   }
 
+  if (options.workItemType) {
+    conditions.push(eq(taskTable.workItemType, options.workItemType));
+  }
+
   if (options.assigneeId) {
     conditions.push(eq(taskTable.userId, options.assigneeId));
   }
@@ -127,6 +132,7 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     description: taskTable.description,
     status: taskTable.status,
     priority: taskTable.priority,
+    workItemType: taskTable.workItemType,
     startDate: taskTable.startDate,
     dueDate: taskTable.dueDate,
     position: taskTable.position,
