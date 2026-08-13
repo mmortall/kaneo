@@ -128,4 +128,32 @@ describe("CreateTaskModal project picker", () => {
       screen.queryByText("common:modals.createTask.selectProject"),
     ).toBeNull();
   });
+
+  it("sends selected epic type when creating a work item", async () => {
+    useLocation.mockReturnValue({
+      pathname: "/dashboard/workspace/workspace-1/project/project-1/board",
+    });
+
+    render(<CreateTaskModal open onClose={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Work item type"), {
+      target: { value: "epic" },
+    });
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "common:modals.createTask.taskTitlePlaceholder",
+      ),
+      { target: { value: "Typed epic" } },
+    );
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+
+    await vi.waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: "project-1",
+          workItemType: "epic",
+        }),
+      );
+    });
+  });
 });
