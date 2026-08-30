@@ -1,5 +1,6 @@
 import {
   Archive,
+  CircleAlert,
   CheckCircle2,
   Circle,
   CircleDashed,
@@ -15,6 +16,7 @@ export const DEFAULT_COLUMN_ICON_NAMES = {
   done: "CheckCircle2",
   archived: "Archive",
   planned: "CircleDashed",
+  blocked: "CircleAlert",
 } as const;
 
 const columnIcons = {
@@ -24,6 +26,7 @@ const columnIcons = {
   Search,
   CheckCircle2,
   CircleDashed,
+  CircleAlert,
   Archive,
 };
 

@@ -1,4 +1,4 @@
-import { and, asc, eq, max, or } from "drizzle-orm";
+import { and, asc, eq, isNull, max, or } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
@@ -9,6 +9,11 @@ import {
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { VIRTUAL_STATUSES } from "../validate-task-fields";
+import {
+  assertTaskWorkflowPolicy,
+  isAiTaskCaller,
+} from "../task-workflow-policy";
 import { claimTaskNumber } from "./claim-task-numbers";
 
 type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -30,6 +35,7 @@ async function resolveDestinationStatus(
       id: columnTable.id,
       slug: columnTable.slug,
       position: columnTable.position,
+      isFinal: columnTable.isFinal,
     })
     .from(columnTable)
     .where(eq(columnTable.projectId, destinationProjectId))
@@ -47,7 +53,13 @@ async function resolveDestinationStatus(
     ? destinationColumns.find((column) => column.slug === requestedStatus)
     : null;
 
-  if (requestedStatus && !requestedColumn) {
+  const requestedVirtualStatus =
+    requestedStatus &&
+    (VIRTUAL_STATUSES as readonly string[]).includes(requestedStatus)
+      ? requestedStatus
+      : null;
+
+  if (requestedStatus && !requestedColumn && !requestedVirtualStatus) {
     throw new HTTPException(400, {
       message: "Selected status is not valid for the destination project",
     });
@@ -57,6 +69,10 @@ async function resolveDestinationStatus(
     (column) => column.slug === currentStatus,
   );
 
+  if (requestedVirtualStatus) {
+    return { id: null, slug: requestedVirtualStatus, isFinal: false };
+  }
+
   return requestedColumn ?? matchingCurrentColumn ?? firstColumn;
 }
 
@@ -64,7 +80,7 @@ async function getNextTaskPosition(
   dbOrTx: DbOrTx,
   projectId: string,
   status: string,
-  columnId: string,
+  columnId: string | null,
 ) {
   const [maxPositionResult] = await dbOrTx
     .select({ maxPosition: max(taskTable.position) })
@@ -73,7 +89,9 @@ async function getNextTaskPosition(
       and(
         eq(taskTable.projectId, projectId),
         eq(taskTable.status, status),
-        eq(taskTable.columnId, columnId),
+        columnId === null
+          ? isNull(taskTable.columnId)
+          : eq(taskTable.columnId, columnId),
       ),
     );
 
@@ -85,11 +103,15 @@ async function moveTask({
   destinationProjectId,
   destinationStatus,
   currentUserId,
+  caller,
+  unblockNote,
 }: {
   taskId: string;
   destinationProjectId: string;
   destinationStatus?: string;
   currentUserId: string;
+  caller?: string;
+  unblockNote?: string;
 }) {
   const existingTask = await db.query.taskTable.findFirst({
     where: eq(taskTable.id, taskId),
@@ -153,6 +175,15 @@ async function moveTask({
     existingTask.status,
     destinationStatus,
   );
+
+  assertTaskWorkflowPolicy({
+    isAiCaller: isAiTaskCaller(caller),
+    existing: existingTask,
+    nextStatus: resolvedColumn.slug,
+    isFinalStatus: resolvedColumn.isFinal === true,
+    fields: existingTask,
+    unblockNote,
+  });
 
   const movedTask = await db.transaction(async (tx) => {
     const [nextTaskNumber, nextPosition] = await Promise.all([

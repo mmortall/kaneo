@@ -6,6 +6,7 @@ import {
   integrationTable,
   taskTable,
 } from "../../../database/schema";
+import { VIRTUAL_STATUSES } from "../../../task/validate-task-fields";
 
 export type TaskRow = InferSelectModel<typeof taskTable>;
 
@@ -13,7 +14,7 @@ export type UpdateTaskStatusResult =
   | { applied: false }
   | { applied: true; before: TaskRow; after: TaskRow };
 
-const NON_COLUMN_STATUSES = new Set(["planned", "archived"]);
+const NON_COLUMN_STATUSES: ReadonlySet<string> = new Set(VIRTUAL_STATUSES);
 
 export async function findTaskByNumber(projectId: string, taskNumber: number) {
   return db.query.taskTable.findFirst({

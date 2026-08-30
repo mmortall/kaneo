@@ -9,6 +9,11 @@ import {
   type WorkItemType,
 } from "../../task-relation/work-item-hierarchy";
 import { assertValidTaskStatus } from "../validate-task-fields";
+import {
+  assertTaskWorkflowPolicy,
+  isAiTaskCaller,
+  resolveTaskWorkflowFields,
+} from "../task-workflow-policy";
 
 async function updateTask(
   id: string,
@@ -23,6 +28,15 @@ async function updateTask(
   userId?: string,
   workItemType?: WorkItemType,
   currentUserId?: string,
+  workflowFields: {
+    goal?: string;
+    acceptanceCriteria?: string;
+    blockedReason?: string;
+    unblockPolicy?: string;
+    completionSummary?: string;
+    unblockNote?: string;
+  } = {},
+  caller?: string,
 ) {
   const [existingTask] = await db
     .select({
@@ -31,6 +45,11 @@ async function updateTask(
       status: taskTable.status,
       projectId: taskTable.projectId,
       workItemType: taskTable.workItemType,
+      goal: taskTable.goal,
+      acceptanceCriteria: taskTable.acceptanceCriteria,
+      blockedReason: taskTable.blockedReason,
+      unblockPolicy: taskTable.unblockPolicy,
+      completionSummary: taskTable.completionSummary,
     })
     .from(taskTable)
     .where(eq(taskTable.id, id))
@@ -56,11 +75,30 @@ async function updateTask(
     await assertWorkItemTypeChangeAllowed(id, resolvedWorkItemType);
   }
 
+  const aiCaller = isAiTaskCaller(caller);
+  const resolvedWorkflowFields = resolveTaskWorkflowFields(
+    existingTask,
+    status,
+    workflowFields,
+  );
   const column = await db.query.columnTable.findFirst({
     where: and(
       eq(columnTable.projectId, projectId),
       eq(columnTable.slug, status),
     ),
+  });
+  assertTaskWorkflowPolicy({
+    isAiCaller: aiCaller,
+    existing: existingTask,
+    nextStatus: status,
+    isFinalStatus: status === "done" || column?.isFinal === true,
+    fields: {
+      ...resolvedWorkflowFields,
+      ...(existingTask.status !== "blocked" && status === "blocked"
+        ? { blockedReason: workflowFields.blockedReason, unblockPolicy: workflowFields.unblockPolicy }
+        : {}),
+    },
+    unblockNote: workflowFields.unblockNote,
   });
 
   const [updatedTask] = await db
@@ -73,6 +111,7 @@ async function updateTask(
       dueDate: dueDate || null,
       projectId,
       description,
+      ...resolvedWorkflowFields,
       priority,
       position,
       userId: userId || null,

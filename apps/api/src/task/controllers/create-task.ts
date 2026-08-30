@@ -3,6 +3,11 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import {
+  assertTaskWorkflowPolicy,
+  isAiTaskCaller,
+  resolveTaskWorkflowFields,
+} from "../task-workflow-policy";
 import { assertValidTaskStatus } from "../validate-task-fields";
 import { claimTaskNumber } from "./claim-task-numbers";
 
@@ -17,6 +22,12 @@ async function createTask({
   description,
   priority,
   workItemType,
+  goal,
+  acceptanceCriteria,
+  blockedReason,
+  unblockPolicy,
+  completionSummary,
+  caller,
 }: {
   projectId: string;
   currentUserId: string;
@@ -28,11 +39,35 @@ async function createTask({
   description?: string;
   priority?: string;
   workItemType?: "task" | "epic" | "sub_epic";
+  goal?: string;
+  acceptanceCriteria?: string;
+  blockedReason?: string;
+  unblockPolicy?: string;
+  completionSummary?: string;
+  caller?: string;
 }) {
   const resolvedStatus = status || "to-do";
   const resolvedPriority = priority || "no-priority";
 
   await assertValidTaskStatus(resolvedStatus, projectId);
+
+  const workflowInput = {
+    goal,
+    acceptanceCriteria,
+    blockedReason,
+    unblockPolicy,
+    completionSummary,
+  };
+  assertTaskWorkflowPolicy({
+    isAiCaller: isAiTaskCaller(caller),
+    nextStatus: resolvedStatus,
+    fields: workflowInput,
+  });
+  const workflowFields = resolveTaskWorkflowFields(
+    undefined,
+    resolvedStatus,
+    workflowInput,
+  );
 
   const [assignee] = await db
     .select({ name: userTable.name })
@@ -74,6 +109,7 @@ async function createTask({
         startDate: startDate || null,
         dueDate: dueDate || null,
         description: description || "",
+        ...workflowFields,
         priority: resolvedPriority,
         workItemType: workItemType ?? "task",
         number: taskNumber,

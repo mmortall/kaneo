@@ -10,6 +10,7 @@ const labelColors: Record<string, string> = {
   "status:in-review": "8B5CF6",
   "status:done": "10B981",
   "status:planned": "8B5CF6",
+  "status:blocked": "DC2626",
   "status:archived": "6B7280",
 };
 

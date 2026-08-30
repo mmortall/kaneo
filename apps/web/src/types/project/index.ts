@@ -16,9 +16,10 @@ type ProjectWithTasksRaw = TasksApiResponse["data"];
 
 export type ProjectWithTasks = Omit<
   ProjectWithTasksRaw,
-  "archivedTasks" | "columns" | "plannedTasks"
+  "archivedTasks" | "blockedTasks" | "columns" | "plannedTasks"
 > & {
   archivedTasks: Task[];
+  blockedTasks?: Task[];
   columns: Array<
     Omit<ProjectWithTasksRaw["columns"][number], "tasks"> & {
       tasks: Task[];

@@ -11,7 +11,9 @@ export const VALID_PRIORITIES = [
   "urgent",
 ] as const;
 
-export const VIRTUAL_STATUSES = ["planned", "archived"] as const;
+// Virtual statuses do not belong to a project column, but must still be valid
+// task states so integrations can preserve them without making tasks vanish.
+export const VIRTUAL_STATUSES = ["planned", "blocked", "archived"] as const;
 
 export function assertValidPriority(priority: string): void {
   if (!(VALID_PRIORITIES as readonly string[]).includes(priority)) {

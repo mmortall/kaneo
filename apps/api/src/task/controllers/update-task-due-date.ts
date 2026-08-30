@@ -3,15 +3,18 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskReminderSentTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { assertTaskMutationAllowed } from "../task-workflow-policy";
 
 async function updateTaskDueDate({
   id,
   dueDate,
   currentUserId,
+  caller,
 }: {
   id: string;
   dueDate: Date | null;
   currentUserId: string;
+  caller?: string;
 }) {
   const existingTask = await db.query.taskTable.findFirst({
     where: eq(taskTable.id, id),
@@ -22,6 +25,8 @@ async function updateTaskDueDate({
       message: "Task not found",
     });
   }
+
+  assertTaskMutationAllowed({ caller, existing: existingTask });
 
   // Clear sent reminders so new due date triggers fresh notifications
   await db

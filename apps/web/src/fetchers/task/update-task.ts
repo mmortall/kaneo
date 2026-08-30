@@ -24,6 +24,11 @@ async function updateTask(taskId: string, task: Task) {
       position: task.position ?? 0,
       projectId: task.projectId,
       workItemType,
+      goal: task.goal || undefined,
+      acceptanceCriteria: task.acceptanceCriteria || undefined,
+      blockedReason: task.blockedReason || undefined,
+      unblockPolicy: task.unblockPolicy || undefined,
+      completionSummary: task.completionSummary || undefined,
     },
   });
 

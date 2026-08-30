@@ -200,12 +200,15 @@ export function registerTools(
     dueBefore: optionalIsoDateTimeSchema,
     dueAfter: optionalIsoDateTimeSchema,
     workItemType: workItemTypeSchema.optional(),
+    agentReadyOnly: z.boolean().optional(),
+    unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
   });
 
   server.registerTool(
     "list_tasks",
     {
-      description: "List tasks for a project (optionally filtered/sorted).",
+      description:
+        "List tasks for a project. Use agentReadyOnly and unblockPolicy to select executable work or AI-unblockable blockers.",
       inputSchema: listTasksSchema,
     },
     async (args) => {
@@ -240,7 +243,8 @@ export function registerTools(
   server.registerTool(
     "create_task",
     {
-      description: "Create a task in a project.",
+      description:
+        "Create an AI-ready task. goal and acceptanceCriteria are required.",
       inputSchema: z.object({
         projectId: nonEmptyString,
         title: nonEmptyString,
@@ -251,6 +255,8 @@ export function registerTools(
         dueDate: optionalIsoDateTimeSchema,
         userId: optionalNonEmptyString,
         workItemType: workItemTypeSchema.optional(),
+        goal: nonEmptyString,
+        acceptanceCriteria: nonEmptyString,
       }),
     },
     async (args) => {
@@ -259,6 +265,8 @@ export function registerTools(
         description: args.description,
         priority: args.priority,
         status: args.status,
+        goal: args.goal,
+        acceptanceCriteria: args.acceptanceCriteria,
       };
       if (args.startDate !== undefined) {
         body.startDate = args.startDate;
@@ -293,13 +301,19 @@ export function registerTools(
     dueDate: nullableOptionalIsoDateTimeSchema,
     userId: nullableOptionalNonEmptyString,
     workItemType: workItemTypeSchema.optional(),
+    goal: optionalNonEmptyString,
+    acceptanceCriteria: optionalNonEmptyString,
+    blockedReason: optionalNonEmptyString,
+    unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
+    completionSummary: optionalNonEmptyString,
+    unblockNote: optionalNonEmptyString,
   });
 
   server.registerTool(
     "update_task",
     {
       description:
-        "Update a task (fetches current task, merges fields, then full update).",
+        "Update an AI-ready task. goal and acceptanceCriteria are required when task has no values; human_required blockers cannot be cleared by AI.",
       inputSchema: updateTaskSchema,
     },
     async (args) => {
@@ -322,11 +336,12 @@ export function registerTools(
     "move_task",
     {
       description:
-        "Move a task to another project (and optional column status).",
+        "Move a task to another project. AI cannot move human_required blocked tasks without human resolution.",
       inputSchema: z.object({
         taskId: nonEmptyString,
         destinationProjectId: nonEmptyString,
         destinationStatus: optionalNonEmptyString,
+        unblockNote: optionalNonEmptyString,
       }),
     },
     async (args) =>
@@ -338,6 +353,9 @@ export function registerTools(
             ...(args.destinationStatus !== undefined
               ? { destinationStatus: args.destinationStatus }
               : {}),
+            ...(args.unblockNote !== undefined
+              ? { unblockNote: args.unblockNote }
+              : {}),
           }),
         }),
       ),
@@ -346,17 +364,42 @@ export function registerTools(
   server.registerTool(
     "update_task_status",
     {
-      description: "Update only the status (column) of a task.",
+      description:
+        "Update task status. Blocking requires reason and policy; closing requires completionSummary; human_required blockers need a human.",
       inputSchema: z.object({
         taskId: nonEmptyString,
         status: nonEmptyString,
+        goal: optionalNonEmptyString,
+        acceptanceCriteria: optionalNonEmptyString,
+        blockedReason: optionalNonEmptyString,
+        unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
+        completionSummary: optionalNonEmptyString,
+        unblockNote: optionalNonEmptyString,
       }),
     },
     async (args) =>
       run(() =>
         client.json(`/api/task/status/${encodeURIComponent(args.taskId)}`, {
           method: "PUT",
-          body: JSON.stringify({ status: args.status }),
+          body: JSON.stringify({
+            status: args.status,
+            ...(args.goal !== undefined ? { goal: args.goal } : {}),
+            ...(args.acceptanceCriteria !== undefined
+              ? { acceptanceCriteria: args.acceptanceCriteria }
+              : {}),
+            ...(args.blockedReason !== undefined
+              ? { blockedReason: args.blockedReason }
+              : {}),
+            ...(args.unblockPolicy !== undefined
+              ? { unblockPolicy: args.unblockPolicy }
+              : {}),
+            ...(args.completionSummary !== undefined
+              ? { completionSummary: args.completionSummary }
+              : {}),
+            ...(args.unblockNote !== undefined
+              ? { unblockNote: args.unblockNote }
+              : {}),
+          }),
         }),
       ),
   );

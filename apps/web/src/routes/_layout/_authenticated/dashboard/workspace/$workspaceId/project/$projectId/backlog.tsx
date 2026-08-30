@@ -241,6 +241,7 @@ function RouteComponent() {
     return {
       ...project,
       plannedTasks: filterTasks(project.plannedTasks || []),
+      blockedTasks: filterTasks(project.blockedTasks || []),
       archivedTasks: filterTasks(project.archivedTasks || []),
     };
   }, [project, filters, getTaskLabels]);
@@ -300,6 +301,7 @@ function RouteComponent() {
     return {
       ...filteredProject,
       plannedTasks: sortTasks(filteredProject.plannedTasks || [], sort),
+      blockedTasks: sortTasks(filteredProject.blockedTasks || [], sort),
       archivedTasks: sortTasks(filteredProject.archivedTasks || [], sort),
     };
   }, [filteredProject, sort]);

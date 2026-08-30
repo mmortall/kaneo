@@ -110,6 +110,8 @@ describe("registerTools", () => {
       description: "",
       priority: "medium",
       status: "to-do",
+      goal: "Deliver epic outcome",
+      acceptanceCriteria: "All epic criteria pass",
       workItemType: "epic",
     });
     await tools.get("update_task")?.handler({

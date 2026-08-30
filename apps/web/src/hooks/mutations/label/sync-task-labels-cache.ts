@@ -36,6 +36,9 @@ export function updateTaskLabelsInProject(
     plannedTasks: project.plannedTasks.map((task) =>
       updateTaskLabels(task, taskId, updater),
     ),
+    blockedTasks: (project.blockedTasks ?? []).map((task) =>
+      updateTaskLabels(task, taskId, updater),
+    ),
     archivedTasks: project.archivedTasks.map((task) =>
       updateTaskLabels(task, taskId, updater),
     ),

@@ -76,6 +76,7 @@ function RouteComponent() {
     () => [
       ...(project?.columns.flatMap((column) => column.tasks) ?? []),
       ...(project?.plannedTasks ?? []),
+      ...(project?.blockedTasks ?? []),
     ],
     [project],
   );

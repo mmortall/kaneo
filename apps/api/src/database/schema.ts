@@ -375,6 +375,11 @@ export const taskTable = pgTable(
     }),
     title: text("title").notNull(),
     description: text("description"),
+    goal: text("goal"),
+    acceptanceCriteria: text("acceptance_criteria"),
+    blockedReason: text("blocked_reason"),
+    unblockPolicy: text("unblock_policy"),
+    completionSummary: text("completion_summary"),
     status: text("status").notNull().default("to-do"),
     columnId: text("column_id").references(() => columnTable.id, {
       onDelete: "set null",

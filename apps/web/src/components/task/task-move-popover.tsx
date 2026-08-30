@@ -3,6 +3,7 @@ import { ArrowRightLeft } from "lucide-react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { VIRTUAL_TASK_STATUSES } from "@/constants/virtual-statuses";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -60,19 +61,29 @@ export default function TaskMovePopover({
   );
 
   const destinationColumns = destinationProject?.columns ?? [];
+  const destinationStatuses = [
+    ...destinationColumns,
+    ...VIRTUAL_TASK_STATUSES.map((status) => ({
+      id: status.value,
+      name: status.name,
+    })),
+  ];
   const canKeepCurrentStatus = destinationColumns.some(
     (column) => column.id === task.status,
   );
+  const canKeepCurrentVirtualStatus = VIRTUAL_TASK_STATUSES.some(
+    (status) => status.value === task.status,
+  );
   const fallbackStatus = destinationColumns[0]?.id ?? "";
-  const effectiveStatus = canKeepCurrentStatus
+  const effectiveStatus = canKeepCurrentStatus || canKeepCurrentVirtualStatus
     ? task.status
     : selectedStatus || fallbackStatus;
 
   const selectedStatusLabel = useMemo(() => {
     if (!effectiveStatus || destinationColumns.length === 0) return null;
-    const column = destinationColumns.find((c) => c.id === effectiveStatus);
+    const column = destinationStatuses.find((c) => c.id === effectiveStatus);
     return column?.name || getStatusLabel(effectiveStatus) || null;
-  }, [destinationColumns, effectiveStatus]);
+  }, [destinationStatuses, effectiveStatus]);
 
   useEffect(() => {
     if (!open) {
@@ -87,13 +98,19 @@ export default function TaskMovePopover({
       return;
     }
 
-    if (canKeepCurrentStatus) {
+    if (canKeepCurrentStatus || canKeepCurrentVirtualStatus) {
       setSelectedStatus(task.status);
       return;
     }
 
     setSelectedStatus(fallbackStatus);
-  }, [canKeepCurrentStatus, fallbackStatus, selectedProjectId, task.status]);
+  }, [
+    canKeepCurrentStatus,
+    canKeepCurrentVirtualStatus,
+    fallbackStatus,
+    selectedProjectId,
+    task.status,
+  ]);
 
   const handleMove = async () => {
     if (!selectedProjectId || !effectiveStatus) return;
@@ -201,7 +218,7 @@ export default function TaskMovePopover({
                     <SelectValue>{selectedStatusLabel}</SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    {destinationColumns.map((column) => (
+                    {destinationStatuses.map((column) => (
                       <SelectItem key={column.id} value={column.id}>
                         {column.name || getStatusLabel(column.id)}
                       </SelectItem>

@@ -6,15 +6,18 @@ import { publishEvent } from "../../events";
 import createNotification from "../../notification/controllers/create-notification";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import { parseMentionIds } from "../../utils/parse-mentions";
+import { assertTaskMutationAllowed } from "../task-workflow-policy";
 
 async function updateTaskDescription({
   id,
   description,
   currentUserId,
+  caller,
 }: {
   id: string;
   description: string;
   currentUserId: string;
+  caller?: string;
 }) {
   const existingTask = await db.query.taskTable.findFirst({
     where: eq(taskTable.id, id),
@@ -25,6 +28,8 @@ async function updateTaskDescription({
       message: "Task not found",
     });
   }
+
+  assertTaskMutationAllowed({ caller, existing: existingTask });
 
   const [updatedTask] = await db
     .update(taskTable)

@@ -18,6 +18,12 @@ export type TaskUpdatePatch = {
   dueDate?: string | null;
   userId?: string | null;
   workItemType?: WorkItemType;
+  goal?: string;
+  acceptanceCriteria?: string;
+  blockedReason?: string;
+  unblockPolicy?: "ai_allowed" | "human_required";
+  completionSummary?: string;
+  unblockNote?: string;
 };
 
 /**
@@ -100,6 +106,29 @@ export function buildFullTaskUpdateBody(
   const dueDate = formatOptionalIso(
     patch.dueDate !== undefined ? patch.dueDate : existing.dueDate,
   );
+  const goal =
+    patch.goal ??
+    (typeof existing.goal === "string" ? existing.goal : undefined);
+  const acceptanceCriteria =
+    patch.acceptanceCriteria ??
+    (typeof existing.acceptanceCriteria === "string"
+      ? existing.acceptanceCriteria
+      : undefined);
+  const blockedReason =
+    patch.blockedReason ??
+    (typeof existing.blockedReason === "string"
+      ? existing.blockedReason
+      : undefined);
+  const unblockPolicy =
+    patch.unblockPolicy ??
+    (typeof existing.unblockPolicy === "string"
+      ? existing.unblockPolicy
+      : undefined);
+  const completionSummary =
+    patch.completionSummary ??
+    (typeof existing.completionSummary === "string"
+      ? existing.completionSummary
+      : undefined);
 
   const body: Record<string, string | number | undefined> = {
     title,
@@ -108,7 +137,16 @@ export function buildFullTaskUpdateBody(
     priority: priorityRaw,
     projectId,
     position,
+    goal,
+    acceptanceCriteria,
+    blockedReason,
+    unblockPolicy,
+    completionSummary,
   };
+
+  if (patch.unblockNote !== undefined) {
+    body.unblockNote = patch.unblockNote;
+  }
 
   if (startDate !== undefined) {
     body.startDate = startDate;

@@ -21,7 +21,14 @@ import {
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
 import { produce } from "immer";
-import { Archive, ChevronRight, Clock, Flag, Plus } from "lucide-react";
+import {
+  Archive,
+  ChevronRight,
+  CircleAlert,
+  Clock,
+  Flag,
+  Plus,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { priorityColorsTaskCard } from "@/constants/priority-colors";
@@ -62,6 +69,7 @@ function BacklogListView({
     Record<string, boolean>
   >({
     planned: true,
+    blocked: true,
     archived: true,
   });
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -73,6 +81,11 @@ function BacklogListView({
       if (expandedSections.planned) {
         visibleTaskIds.push(
           ...(project.plannedTasks || []).map((task) => task.id),
+        );
+      }
+      if (expandedSections.blocked) {
+        visibleTaskIds.push(
+          ...(project.blockedTasks || []).map((task) => task.id),
         );
       }
       if (expandedSections.archived) {
@@ -143,17 +156,24 @@ function BacklogListView({
       return;
     }
 
-    if (over.id === "planned" || over.id === "archived") {
+    if (
+      over.id === "planned" ||
+      over.id === "blocked" ||
+      over.id === "archived"
+    ) {
       setOverColumnId(over.id.toString());
       return;
     }
 
     const taskId = over.id.toString();
     const plannedTasks = project?.plannedTasks || [];
+    const blockedTasks = project?.blockedTasks || [];
     const archivedTasks = project?.archivedTasks || [];
 
     if (plannedTasks.some((task) => task.id === taskId)) {
       setOverColumnId("planned");
+    } else if (blockedTasks.some((task) => task.id === taskId)) {
+      setOverColumnId("blocked");
     } else if (archivedTasks.some((task) => task.id === taskId)) {
       setOverColumnId("archived");
     } else {
@@ -172,17 +192,24 @@ function BacklogListView({
     const overId = over.id.toString();
 
     const plannedTasks = project.plannedTasks || [];
+    const blockedTasks = project.blockedTasks || [];
     const archivedTasks = project.archivedTasks || [];
-    const activeTask = [...plannedTasks, ...archivedTasks].find(
+    const activeTask = [...plannedTasks, ...blockedTasks, ...archivedTasks].find(
       (task) => task.id === activeTaskId,
     );
 
     if (!activeTask) return;
 
     let targetSection = overId;
-    if (overId !== "planned" && overId !== "archived") {
+    if (
+      overId !== "planned" &&
+      overId !== "blocked" &&
+      overId !== "archived"
+    ) {
       if (plannedTasks.some((task) => task.id === overId)) {
         targetSection = "planned";
+      } else if (blockedTasks.some((task) => task.id === overId)) {
+        targetSection = "blocked";
       } else if (archivedTasks.some((task) => task.id === overId)) {
         targetSection = "archived";
       } else {
@@ -191,10 +218,18 @@ function BacklogListView({
     }
 
     const updatedProject = produce(project, (draft) => {
-      const sourceSection =
-        activeTask.status === "planned"
-          ? draft.plannedTasks || []
-          : draft.archivedTasks || [];
+      const getSectionTasks = (sectionId: string) => {
+        if (sectionId === "planned") return draft.plannedTasks || [];
+        if (sectionId === "blocked") return draft.blockedTasks || [];
+        return draft.archivedTasks || [];
+      };
+      const setSectionTasks = (sectionId: string, tasks: Task[]) => {
+        if (sectionId === "planned") draft.plannedTasks = tasks;
+        else if (sectionId === "blocked") draft.blockedTasks = tasks;
+        else draft.archivedTasks = tasks;
+      };
+
+      const sourceSection = getSectionTasks(activeTask.status);
 
       const sourceTaskIndex = sourceSection.findIndex(
         (task) => task.id === activeTaskId,
@@ -203,38 +238,29 @@ function BacklogListView({
 
       if (!task) return;
 
-      if (activeTask.status === "planned") {
-        draft.plannedTasks =
-          draft.plannedTasks?.filter((t) => t.id !== activeTaskId) || [];
-      } else {
-        draft.archivedTasks =
-          draft.archivedTasks?.filter((t) => t.id !== activeTaskId) || [];
-      }
+      setSectionTasks(
+        activeTask.status,
+        sourceSection.filter((t) => t.id !== activeTaskId),
+      );
 
       if (activeTask.status === targetSection) {
-        const targetSectionTasks =
-          activeTask.status === "planned"
-            ? draft.plannedTasks || []
-            : draft.archivedTasks || [];
+        const targetSectionTasks = getSectionTasks(activeTask.status);
 
         let destinationIndex = targetSectionTasks.findIndex(
           (t) => t.id === overId,
         );
 
+        if (destinationIndex < 0) {
+          destinationIndex = targetSectionTasks.length;
+        }
+
         if (sourceTaskIndex <= destinationIndex) {
           destinationIndex += 1;
         }
 
-        if (activeTask.status === "planned") {
-          draft.plannedTasks?.splice(destinationIndex, 0, task);
-        } else {
-          draft.archivedTasks?.splice(destinationIndex, 0, task);
-        }
+        targetSectionTasks.splice(destinationIndex, 0, task);
 
-        const finalTasks =
-          activeTask.status === "planned"
-            ? draft.plannedTasks || []
-            : draft.archivedTasks || [];
+        const finalTasks = getSectionTasks(activeTask.status);
 
         finalTasks.forEach((t, index) => {
           updateTask({
@@ -244,17 +270,10 @@ function BacklogListView({
         });
       } else {
         task.status = targetSection;
+        const targetTasks = [...getSectionTasks(targetSection), task];
+        setSectionTasks(targetSection, targetTasks);
 
-        if (targetSection === "planned") {
-          draft.plannedTasks = [...(draft.plannedTasks || []), task];
-        } else {
-          draft.archivedTasks = [...(draft.archivedTasks || []), task];
-        }
-
-        const updatedTasks =
-          targetSection === "planned"
-            ? draft.plannedTasks || []
-            : draft.archivedTasks || [];
+        const updatedTasks = getSectionTasks(targetSection);
 
         updatedTasks.forEach((t, index) => {
           updateTask({
@@ -264,10 +283,7 @@ function BacklogListView({
           });
         });
 
-        const sourceTasks =
-          activeTask.status === "planned"
-            ? draft.plannedTasks || []
-            : draft.archivedTasks || [];
+        const sourceTasks = getSectionTasks(activeTask.status);
 
         sourceTasks.forEach((t, index) => {
           updateTask({
@@ -406,10 +422,12 @@ function BacklogListView({
   }
 
   const plannedTasks = project.plannedTasks || [];
+  const blockedTasks = project.blockedTasks || [];
   const archivedTasks = project.archivedTasks || [];
 
   const activeTask =
     project.plannedTasks.find((task) => task.id === activeId) ||
+    project.blockedTasks?.find((task) => task.id === activeId) ||
     project.archivedTasks.find((task) => task.id === activeId);
 
   return (
@@ -429,6 +447,13 @@ function BacklogListView({
             icon={Clock}
             tasks={plannedTasks}
             showAddButton={true}
+          />
+
+          <BacklogSection
+            sectionId="blocked"
+            title="Blocked"
+            icon={CircleAlert}
+            tasks={blockedTasks}
           />
 
           <BacklogSection

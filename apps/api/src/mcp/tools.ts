@@ -11,6 +11,7 @@ class ApiClient {
   async json<T = unknown>(path: string, init?: RequestInit): Promise<T> {
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${this.token}`);
+    headers.set("x-kaneo-caller", "ai");
     if (init?.body != null && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
@@ -33,11 +34,15 @@ class ApiClient {
     }
     if (!res.ok) {
       const detail =
-        typeof body === "object" && body !== null && "message" in body
-          ? (body as { message: string }).message
-          : typeof body === "string" && body.length > 0
-            ? body.slice(0, 500)
-            : `HTTP ${res.status}`;
+        typeof body === "object" &&
+        body !== null &&
+        (body as { error?: unknown }).error === "TASK_WORKFLOW_POLICY"
+          ? JSON.stringify(body)
+          : typeof body === "object" && body !== null && "message" in body
+            ? (body as { message: string }).message
+            : typeof body === "string" && body.length > 0
+              ? body.slice(0, 500)
+              : `HTTP ${res.status}`;
       throw new Error(`${path}: ${detail}`);
     }
     return body as T;
@@ -143,6 +148,29 @@ function buildFullTaskUpdateBody(
   const dueDate = formatOptionalIso(
     patch.dueDate !== undefined ? patch.dueDate : existing.dueDate,
   );
+  const goal =
+    (patch.goal as string) ??
+    (typeof existing.goal === "string" ? existing.goal : undefined);
+  const acceptanceCriteria =
+    (patch.acceptanceCriteria as string) ??
+    (typeof existing.acceptanceCriteria === "string"
+      ? existing.acceptanceCriteria
+      : undefined);
+  const blockedReason =
+    (patch.blockedReason as string) ??
+    (typeof existing.blockedReason === "string"
+      ? existing.blockedReason
+      : undefined);
+  const unblockPolicy =
+    (patch.unblockPolicy as string) ??
+    (typeof existing.unblockPolicy === "string"
+      ? existing.unblockPolicy
+      : undefined);
+  const completionSummary =
+    (patch.completionSummary as string) ??
+    (typeof existing.completionSummary === "string"
+      ? existing.completionSummary
+      : undefined);
 
   const body: Record<string, string | number | undefined> = {
     title,
@@ -151,7 +179,15 @@ function buildFullTaskUpdateBody(
     priority: priorityRaw,
     projectId,
     position,
+    goal,
+    acceptanceCriteria,
+    blockedReason,
+    unblockPolicy,
+    completionSummary,
   };
+  if (patch.unblockNote !== undefined) {
+    body.unblockNote = patch.unblockNote as string;
+  }
   if (startDate !== undefined) body.startDate = startDate;
   if (dueDate !== undefined) body.dueDate = dueDate;
   if (userId !== undefined) body.userId = userId;
@@ -323,7 +359,8 @@ export function registerMcpTools(
   server.registerTool(
     "list_tasks",
     {
-      description: "List tasks for a project (optionally filtered/sorted).",
+      description:
+        "List tasks for a project. Use agentReadyOnly and unblockPolicy to select executable work or AI-unblockable blockers.",
       inputSchema: z.object({
         projectId: nonEmptyString,
         status: optionalNonEmptyString,
@@ -345,6 +382,8 @@ export function registerMcpTools(
         dueBefore: optionalIsoDateTimeSchema,
         dueAfter: optionalIsoDateTimeSchema,
         workItemType: workItemTypeSchema.optional(),
+        agentReadyOnly: z.boolean().optional(),
+        unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
       }),
     },
     async (args) => {
@@ -380,7 +419,8 @@ export function registerMcpTools(
   server.registerTool(
     "create_task",
     {
-      description: "Create a task in a project.",
+      description:
+        "Create an AI-ready task. goal and acceptanceCriteria are required.",
       inputSchema: z.object({
         projectId: nonEmptyString,
         title: nonEmptyString,
@@ -391,6 +431,8 @@ export function registerMcpTools(
         dueDate: optionalIsoDateTimeSchema,
         userId: optionalNonEmptyString,
         workItemType: workItemTypeSchema.optional(),
+        goal: nonEmptyString,
+        acceptanceCriteria: nonEmptyString,
       }),
     },
     async (args) => {
@@ -399,6 +441,8 @@ export function registerMcpTools(
         description: args.description,
         priority: args.priority,
         status: args.status,
+        goal: args.goal,
+        acceptanceCriteria: args.acceptanceCriteria,
       };
       if (args.startDate !== undefined) body.startDate = args.startDate;
       if (args.dueDate !== undefined) body.dueDate = args.dueDate;
@@ -418,7 +462,7 @@ export function registerMcpTools(
     "update_task",
     {
       description:
-        "Update a task (fetches current task, merges fields, then full update).",
+        "Update an AI-ready task. goal and acceptanceCriteria are required when task has no values; human_required blockers cannot be cleared by AI.",
       inputSchema: z.object({
         taskId: nonEmptyString,
         title: optionalNonEmptyString,
@@ -431,6 +475,12 @@ export function registerMcpTools(
         dueDate: nullableOptionalIsoDateTimeSchema,
         userId: nullableOptionalNonEmptyString,
         workItemType: workItemTypeSchema.optional(),
+        goal: optionalNonEmptyString,
+        acceptanceCriteria: optionalNonEmptyString,
+        blockedReason: optionalNonEmptyString,
+        unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
+        completionSummary: optionalNonEmptyString,
+        unblockNote: optionalNonEmptyString,
       }),
     },
     async (args) => {
@@ -453,11 +503,12 @@ export function registerMcpTools(
     "move_task",
     {
       description:
-        "Move a task to another project (and optional column status).",
+        "Move a task to another project. AI cannot move human_required blocked tasks without human resolution.",
       inputSchema: z.object({
         taskId: nonEmptyString,
         destinationProjectId: nonEmptyString,
         destinationStatus: optionalNonEmptyString,
+        unblockNote: optionalNonEmptyString,
       }),
     },
     async (args) =>
@@ -469,6 +520,9 @@ export function registerMcpTools(
             ...(args.destinationStatus !== undefined
               ? { destinationStatus: args.destinationStatus }
               : {}),
+            ...(args.unblockNote !== undefined
+              ? { unblockNote: args.unblockNote }
+              : {}),
           }),
         }),
       ),
@@ -477,14 +531,42 @@ export function registerMcpTools(
   server.registerTool(
     "update_task_status",
     {
-      description: "Update only the status (column) of a task.",
-      inputSchema: z.object({ taskId: nonEmptyString, status: nonEmptyString }),
+      description:
+        "Update task status. Blocking requires reason and policy; closing requires completionSummary; human_required blockers need a human.",
+      inputSchema: z.object({
+        taskId: nonEmptyString,
+        status: nonEmptyString,
+        goal: optionalNonEmptyString,
+        acceptanceCriteria: optionalNonEmptyString,
+        blockedReason: optionalNonEmptyString,
+        unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
+        completionSummary: optionalNonEmptyString,
+        unblockNote: optionalNonEmptyString,
+      }),
     },
     async (args) =>
       run(() =>
         client.json(`/api/task/status/${encodeURIComponent(args.taskId)}`, {
           method: "PUT",
-          body: JSON.stringify({ status: args.status }),
+          body: JSON.stringify({
+            status: args.status,
+            ...(args.goal !== undefined ? { goal: args.goal } : {}),
+            ...(args.acceptanceCriteria !== undefined
+              ? { acceptanceCriteria: args.acceptanceCriteria }
+              : {}),
+            ...(args.blockedReason !== undefined
+              ? { blockedReason: args.blockedReason }
+              : {}),
+            ...(args.unblockPolicy !== undefined
+              ? { unblockPolicy: args.unblockPolicy }
+              : {}),
+            ...(args.completionSummary !== undefined
+              ? { completionSummary: args.completionSummary }
+              : {}),
+            ...(args.unblockNote !== undefined
+              ? { unblockNote: args.unblockNote }
+              : {}),
+          }),
         }),
       ),
   );

@@ -30,6 +30,7 @@ export default function TaskCrumbSelect({
   const tasks = [
     ...(project?.columns?.flatMap((column) => column.tasks) ?? []),
     ...(project?.plannedTasks ?? []),
+    ...(project?.blockedTasks ?? []),
     ...(project?.archivedTasks ?? []),
   ];
 

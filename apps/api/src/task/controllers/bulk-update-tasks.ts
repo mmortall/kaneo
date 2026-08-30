@@ -13,6 +13,11 @@ import { publishEvent } from "../../events";
 import { removeLabelFromGitea } from "../../plugins/gitea/utils/sync-label-to-gitea";
 import { removeLabelFromGitHub } from "../../plugins/github/utils/sync-label-to-github";
 import {
+  assertTaskWorkflowPolicy,
+  isAiTaskCaller,
+  resolveTaskWorkflowFields,
+} from "../task-workflow-policy";
+import {
   assertValidPriority,
   assertValidTaskStatus,
 } from "../validate-task-fields";
@@ -31,11 +36,15 @@ async function bulkUpdateTasks({
   operation,
   value,
   userId,
+  caller,
+  unblockNote,
 }: {
   taskIds: string[];
   operation: BulkOperation;
   value?: string | null;
   userId: string;
+  caller?: string;
+  unblockNote?: string | null;
 }) {
   const tasks = await db
     .select({
@@ -44,6 +53,12 @@ async function bulkUpdateTasks({
       projectId: taskTable.projectId,
       userId: taskTable.userId,
       dueDate: taskTable.dueDate,
+      status: taskTable.status,
+      goal: taskTable.goal,
+      acceptanceCriteria: taskTable.acceptanceCriteria,
+      blockedReason: taskTable.blockedReason,
+      unblockPolicy: taskTable.unblockPolicy,
+      completionSummary: taskTable.completionSummary,
       workspaceId: projectTable.workspaceId,
     })
     .from(taskTable)
@@ -90,6 +105,7 @@ async function bulkUpdateTasks({
   }
 
   const foundIds = tasks.map((t) => t.id);
+  const aiCaller = isAiTaskCaller(caller);
   let updatedCount = 0;
 
   switch (operation) {
@@ -109,16 +125,34 @@ async function bulkUpdateTasks({
           ),
         });
 
+        for (const task of tasks.filter((item) => item.projectId === projectId)) {
+          assertTaskWorkflowPolicy({
+            isAiCaller: aiCaller,
+            existing: task,
+            nextStatus: value,
+            isFinalStatus: value === "done" || column?.isFinal === true,
+            fields: task,
+            unblockNote,
+          });
+        }
+
         const projectTaskIds = tasks
           .filter((t) => t.projectId === projectId)
           .map((t) => t.id);
 
-        const result = await db
-          .update(taskTable)
-          .set({ status: value, columnId: column?.id ?? null })
-          .where(inArray(taskTable.id, projectTaskIds));
+        for (const task of tasks.filter((item) => item.projectId === projectId)) {
+          const workflowFields = resolveTaskWorkflowFields(task, value, {});
+          const result = await db
+            .update(taskTable)
+            .set({
+              status: value,
+              columnId: column?.id ?? null,
+              ...workflowFields,
+            })
+            .where(eq(taskTable.id, task.id));
 
-        updatedCount += result.rowCount ?? projectTaskIds.length;
+          updatedCount += result.rowCount ?? 1;
+        }
 
         for (const taskId of projectTaskIds) {
           await publishEvent("task.status_changed", {
@@ -143,6 +177,15 @@ async function bulkUpdateTasks({
         throw new HTTPException(400, { message: "Priority value is required" });
       }
       assertValidPriority(value);
+      for (const task of tasks) {
+        assertTaskWorkflowPolicy({
+          isAiCaller: aiCaller,
+          existing: task,
+          nextStatus: task.status,
+          isFinalStatus: task.status === "done",
+          fields: task,
+        });
+      }
 
       const result = await db
         .update(taskTable)
@@ -164,6 +207,15 @@ async function bulkUpdateTasks({
     }
 
     case "updateAssignee": {
+      for (const task of tasks) {
+        assertTaskWorkflowPolicy({
+          isAiCaller: aiCaller,
+          existing: task,
+          nextStatus: task.status,
+          isFinalStatus: task.status === "done",
+          fields: task,
+        });
+      }
       const newAssigneeName = value
         ? (
             await db
@@ -323,6 +375,15 @@ async function bulkUpdateTasks({
     }
 
     case "updateDueDate": {
+      for (const task of tasks) {
+        assertTaskWorkflowPolicy({
+          isAiCaller: aiCaller,
+          existing: task,
+          nextStatus: task.status,
+          isFinalStatus: task.status === "done",
+          fields: task,
+        });
+      }
       let parsedDate: Date | null = null;
       if (value) {
         parsedDate = new Date(value);

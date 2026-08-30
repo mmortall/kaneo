@@ -29,6 +29,11 @@ export const taskSchema = v.object({
   userId: v.nullable(v.string()),
   title: v.string(),
   description: v.nullable(v.string()),
+  goal: v.nullable(v.string()),
+  acceptanceCriteria: v.nullable(v.string()),
+  blockedReason: v.nullable(v.string()),
+  unblockPolicy: v.nullable(v.string()),
+  completionSummary: v.nullable(v.string()),
   status: v.string(),
   priority: v.picklist([
     "no-priority",

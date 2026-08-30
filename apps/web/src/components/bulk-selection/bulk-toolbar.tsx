@@ -37,6 +37,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import labelColors from "@/constants/label-colors";
+import { VIRTUAL_TASK_STATUSES } from "@/constants/virtual-statuses";
 import { useBulkOperations } from "@/hooks/mutations/task/use-bulk-operations";
 import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
@@ -292,7 +293,20 @@ function BulkToolbar() {
       groups.push({
         value: "status",
         label: t("tasks:bulk.changeStatus"),
-        items: (project?.columns ?? []).map((col) => ({
+        items: [
+          ...(project?.columns ?? []).map((col) => ({
+            id: col.id,
+            name: col.name,
+            icon: col.icon,
+            isFinal: col.isFinal,
+          })),
+          ...VIRTUAL_TASK_STATUSES.map((status) => ({
+            id: status.value,
+            name: status.name,
+            icon: null,
+            isFinal: status.isFinal,
+          })),
+        ].map((col) => ({
           value: `status-${col.id}`,
           label: col.name,
           icon: getColumnIcon(col.id, col.isFinal, col.icon),

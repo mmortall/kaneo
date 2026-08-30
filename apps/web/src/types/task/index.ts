@@ -20,6 +20,11 @@ type Task = {
   title: string;
   number: number | null;
   description: string | null;
+  goal?: string | null;
+  acceptanceCriteria?: string | null;
+  blockedReason?: string | null;
+  unblockPolicy?: "ai_allowed" | "human_required" | null;
+  completionSummary?: string | null;
   status: string;
   priority: string | null;
   workItemType?: string;

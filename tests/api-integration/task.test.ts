@@ -280,4 +280,49 @@ describe("API integration: task creation", () => {
       position: 1,
     });
   });
+
+  it("preserves blocked status without assigning a project column", async () => {
+    const member = await createWorkspaceMember();
+    const { project } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+
+    const createResponse = await app.request(`/api/task/${project.id}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        title: "Blocked task",
+        description: "Waiting for an external dependency",
+        priority: "high",
+        status: "blocked",
+      }),
+    });
+
+    expect(createResponse.status).toBe(200);
+    const createdTask = (await createResponse.json()) as {
+      id: string;
+      status: string;
+      columnId: string | null;
+    };
+
+    expect(createdTask).toMatchObject({
+      status: "blocked",
+      columnId: null,
+    });
+
+    const listResponse = await app.request(`/api/task/tasks/${project.id}`);
+    expect(listResponse.status).toBe(200);
+    const payload = (await listResponse.json()) as {
+      data: { blockedTasks: Array<{ id: string; status: string }> };
+    };
+
+    expect(payload.data.blockedTasks).toEqual([
+      expect.objectContaining({ id: createdTask.id, status: "blocked" }),
+    ]);
+  });
 });

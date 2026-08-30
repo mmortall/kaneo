@@ -1,0 +1,13 @@
+.git
+.agents
+.ai
+.claude
+.cursor
+.vscode
+**/node_modules
+**/dist
+**/build
+**/.turbo
+**/.vite
+**/coverage
+*.zip

@@ -3,15 +3,18 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import { assertTaskMutationAllowed } from "../task-workflow-policy";
 
 async function updateTaskAssignee({
   id,
   userId,
   currentUserId,
+  caller,
 }: {
   id: string;
   userId: string | null;
   currentUserId: string;
+  caller?: string;
 }) {
   const existingTask = await db.query.taskTable.findFirst({
     where: eq(taskTable.id, id),
@@ -22,6 +25,8 @@ async function updateTaskAssignee({
       message: "Task not found",
     });
   }
+
+  assertTaskMutationAllowed({ caller, existing: existingTask });
 
   const nextAssigneeId = userId || null;
   if (existingTask.userId === nextAssigneeId) {

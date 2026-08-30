@@ -76,6 +76,7 @@ describe("TaskStatusPopover", () => {
     fireEvent.click(screen.getByRole("button", { name: "Status" }));
 
     expect(await screen.findByRole("button", { name: /Ready/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Blocked/ })).toBeVisible();
   });
 
   it("shows loading feedback while status options are loading", async () => {

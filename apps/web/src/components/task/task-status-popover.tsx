@@ -2,6 +2,7 @@ import { Check } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
+import { VIRTUAL_TASK_STATUSES } from "@/constants/virtual-statuses";
 import {
   Popover,
   PopoverContent,
@@ -31,12 +32,20 @@ export default function TaskStatusPopover({
   const { data: columns, isLoading, isError } = useGetColumns(task.projectId);
   const statusOptions = useMemo(
     () =>
-      (columns ?? []).map((col) => ({
-        value: col.slug,
-        label: col.name,
-        icon: col.icon,
-        isFinal: col.isFinal,
-      })),
+      [
+        ...(columns ?? []).map((col) => ({
+          value: col.slug,
+          label: col.name,
+          icon: col.icon,
+          isFinal: col.isFinal,
+        })),
+        ...VIRTUAL_TASK_STATUSES.map((status) => ({
+          value: status.value,
+          label: status.name,
+          icon: null,
+          isFinal: status.isFinal,
+        })),
+      ],
     [columns],
   );
   const { mutateAsync: updateTaskStatus } = useUpdateTaskStatus();

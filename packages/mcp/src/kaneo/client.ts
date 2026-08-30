@@ -25,6 +25,7 @@ export class KaneoClient {
     const token = await this.auth.getAccessToken();
     const headers = new Headers(init?.headers);
     headers.set("Authorization", `Bearer ${token}`);
+    headers.set("x-kaneo-caller", "ai");
     if (init?.body != null && !headers.has("Content-Type")) {
       headers.set("Content-Type", "application/json");
     }
@@ -60,6 +61,13 @@ export class KaneoClient {
     if (!res.ok) {
       let detail: string;
       if (
+        typeof body === "object" &&
+        body !== null &&
+        "error" in body &&
+        (body as { error?: unknown }).error === "TASK_WORKFLOW_POLICY"
+      ) {
+        detail = JSON.stringify(body);
+      } else if (
         typeof body === "object" &&
         body !== null &&
         "message" in body &&

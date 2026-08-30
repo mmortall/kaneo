@@ -12,6 +12,7 @@ import {
   ContextMenuSubContent,
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu";
+import { VIRTUAL_TASK_STATUSES } from "@/constants/virtual-statuses";
 import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
 import { useUpdateTaskAssignee } from "@/hooks/mutations/task/use-update-task-assignee";
 import { useUpdateTaskDescription } from "@/hooks/mutations/task/use-update-task-description";
@@ -64,6 +65,15 @@ export default function TaskCardContextMenuContent({
           icon: col.icon,
           isFinal: col.isFinal,
         }));
+  const statusOptions = [
+    ...columns,
+    ...VIRTUAL_TASK_STATUSES.map((status) => ({
+      slug: status.value,
+      name: status.name,
+      icon: null,
+      isFinal: status.isFinal,
+    })),
+  ];
   const { data: workspaceUsers } = useGetActiveWorkspaceUsers(
     taskCardContext.worskpaceId,
   );
@@ -177,7 +187,7 @@ export default function TaskCardContextMenuContent({
             <span>{t("tasks:status.label")}</span>
           </ContextMenuSubTrigger>
           <ContextMenuSubContent className="w-48">
-            {columns.map((col) => (
+            {statusOptions.map((col) => (
               <ContextMenuCheckboxItem
                 key={col.slug}
                 checked={task.status === col.slug}

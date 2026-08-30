@@ -45,11 +45,13 @@ import updateTaskDueDate from "./controllers/update-task-due-date";
 import updateTaskPriority from "./controllers/update-task-priority";
 import updateTaskStatus from "./controllers/update-task-status";
 import updateTaskTitle from "./controllers/update-task-title";
+import { TASK_UNBLOCK_POLICIES } from "./task-workflow-policy";
 import { VALID_PRIORITIES } from "./validate-task-fields";
 
 const task = new Hono<{
   Variables: {
     userId: string;
+    apiKey?: { id: string };
   };
 }>()
   .get(
@@ -91,6 +93,13 @@ const task = new Hono<{
           dueBefore: v.optional(v.string()),
           dueAfter: v.optional(v.string()),
           workItemType: v.optional(v.picklist(["task", "epic", "sub_epic"])),
+          agentReadyOnly: v.optional(
+            v.pipe(
+              v.string(),
+              v.transform((value) => value.toLowerCase() === "true"),
+            ),
+          ),
+          unblockPolicy: v.optional(v.picklist(TASK_UNBLOCK_POLICIES)),
         }),
       ),
     ),
@@ -140,13 +149,14 @@ const task = new Hono<{
           "updateDueDate",
         ] as const),
         value: v.optional(v.nullable(v.string())),
+        unblockNote: v.optional(v.string()),
       }),
     ),
     workspaceAccess.fromTasks(),
     requireBulkTaskPermission,
     requireBulkTaskEntitlement,
     async (c) => {
-      const { taskIds, operation, value } = c.req.valid("json");
+      const { taskIds, operation, value, unblockNote } = c.req.valid("json");
       const userId = c.get("userId");
 
       if (!userId) {
@@ -168,6 +178,8 @@ const task = new Hono<{
         operation,
         value,
         userId,
+        caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
+        unblockNote,
       });
 
       return c.json(result);
@@ -199,6 +211,11 @@ const task = new Hono<{
         status: v.string(),
         userId: v.optional(v.string()),
         workItemType: v.optional(v.picklist(["task", "epic", "sub_epic"])),
+        goal: v.optional(v.string()),
+        acceptanceCriteria: v.optional(v.string()),
+        blockedReason: v.optional(v.string()),
+        unblockPolicy: v.optional(v.picklist(TASK_UNBLOCK_POLICIES)),
+        completionSummary: v.optional(v.string()),
       }),
     ),
     workspaceAccess.fromProject("projectId"),
@@ -215,6 +232,11 @@ const task = new Hono<{
         status,
         userId,
         workItemType,
+        goal,
+        acceptanceCriteria,
+        blockedReason,
+        unblockPolicy,
+        completionSummary,
       } = c.req.valid("json");
 
       const parsedStartDate =
@@ -239,6 +261,12 @@ const task = new Hono<{
         priority,
         status,
         workItemType,
+        goal,
+        acceptanceCriteria,
+        blockedReason,
+        unblockPolicy,
+        completionSummary,
+        caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
       });
 
       return c.json(task);
@@ -298,6 +326,7 @@ const task = new Hono<{
       v.object({
         destinationProjectId: v.string(),
         destinationStatus: v.optional(v.string()),
+        unblockNote: v.optional(v.string()),
       }),
     ),
     workspaceAccess.fromTask(),
@@ -305,7 +334,8 @@ const task = new Hono<{
     requireEntitlement,
     async (c) => {
       const { id } = c.req.valid("param");
-      const { destinationProjectId, destinationStatus } = c.req.valid("json");
+      const { destinationProjectId, destinationStatus, unblockNote } =
+        c.req.valid("json");
       const currentUserId = c.get("userId");
 
       const result = await moveTask({
@@ -313,6 +343,8 @@ const task = new Hono<{
         destinationProjectId,
         destinationStatus,
         currentUserId,
+        caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
+        unblockNote,
       });
 
       return c.json(result);
@@ -347,6 +379,12 @@ const task = new Hono<{
         position: v.number(),
         userId: v.optional(v.string()),
         workItemType: v.optional(v.picklist(["task", "epic", "sub_epic"])),
+        goal: v.optional(v.string()),
+        acceptanceCriteria: v.optional(v.string()),
+        blockedReason: v.optional(v.string()),
+        unblockPolicy: v.optional(v.picklist(TASK_UNBLOCK_POLICIES)),
+        completionSummary: v.optional(v.string()),
+        unblockNote: v.optional(v.string()),
       }),
     ),
     workspaceAccess.fromTask(),
@@ -366,6 +404,12 @@ const task = new Hono<{
         position,
         userId,
         workItemType,
+        goal,
+        acceptanceCriteria,
+        blockedReason,
+        unblockPolicy,
+        completionSummary,
+        unblockNote,
       } = c.req.valid("json");
 
       const currentUserId = c.get("userId");
@@ -394,6 +438,15 @@ const task = new Hono<{
         userId,
         workItemType,
         currentUserId,
+        {
+          goal,
+          acceptanceCriteria,
+          blockedReason,
+          unblockPolicy,
+          completionSummary,
+          unblockNote,
+        },
+        c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
       );
 
       return c.json(task);
@@ -452,6 +505,11 @@ const task = new Hono<{
             startDate: v.optional(v.nullable(v.string())),
             dueDate: v.optional(v.nullable(v.string())),
             userId: v.optional(v.nullable(v.string())),
+            goal: v.optional(v.nullable(v.string())),
+            acceptanceCriteria: v.optional(v.nullable(v.string())),
+            blockedReason: v.optional(v.nullable(v.string())),
+            unblockPolicy: v.optional(v.nullable(v.string())),
+            completionSummary: v.optional(v.nullable(v.string())),
           }),
         ),
       }),
@@ -464,7 +522,12 @@ const task = new Hono<{
       const { tasks } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
-      const result = await importTasks(projectId, tasks, currentUserId);
+      const result = await importTasks(
+        projectId,
+        tasks,
+        currentUserId,
+        c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
+      );
 
       return c.json(result);
     },
@@ -512,16 +575,46 @@ const task = new Hono<{
       },
     }),
     validator("param", v.object({ id: v.string() })),
-    validator("json", v.object({ status: v.string() })),
+    validator(
+      "json",
+      v.object({
+        status: v.string(),
+        goal: v.optional(v.string()),
+        acceptanceCriteria: v.optional(v.string()),
+        blockedReason: v.optional(v.string()),
+        unblockPolicy: v.optional(v.picklist(TASK_UNBLOCK_POLICIES)),
+        completionSummary: v.optional(v.string()),
+        unblockNote: v.optional(v.string()),
+      }),
+    ),
     workspaceAccess.fromTask(),
     requireWorkspacePermission({ task: ["update"] }),
     requireEntitlement,
     async (c) => {
       const { id } = c.req.valid("param");
-      const { status } = c.req.valid("json");
+      const {
+        status,
+        goal,
+        acceptanceCriteria,
+        blockedReason,
+        unblockPolicy,
+        completionSummary,
+        unblockNote,
+      } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
-      const task = await updateTaskStatus({ id, status, currentUserId });
+      const task = await updateTaskStatus({
+        id,
+        status,
+        currentUserId,
+        caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
+        goal,
+        acceptanceCriteria,
+        blockedReason,
+        unblockPolicy,
+        completionSummary,
+        unblockNote,
+      });
 
       return c.json(task);
     },
@@ -551,7 +644,12 @@ const task = new Hono<{
       const { priority } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
-      const task = await updateTaskPriority({ id, priority, currentUserId });
+      const task = await updateTaskPriority({
+        id,
+        priority,
+        currentUserId,
+        caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
+      });
 
       return c.json(task);
     },
@@ -581,7 +679,12 @@ const task = new Hono<{
       const { userId } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
-      const task = await updateTaskAssignee({ id, userId, currentUserId });
+      const task = await updateTaskAssignee({
+        id,
+        userId,
+        currentUserId,
+        caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
+      });
 
       return c.json(task);
     },
@@ -615,6 +718,7 @@ const task = new Hono<{
         id,
         dueDate: dueDate ? validateAndParseDate(dueDate, "dueDate") : null,
         currentUserId,
+        caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
       });
 
       return c.json(task);
@@ -646,7 +750,12 @@ const task = new Hono<{
       const { title } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
-      const task = await updateTaskTitle({ id, title, currentUserId });
+      const task = await updateTaskTitle({
+        id,
+        title,
+        currentUserId,
+        caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
+      });
 
       return c.json(task);
     },
@@ -901,6 +1010,7 @@ const task = new Hono<{
         id,
         description,
         currentUserId,
+        caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
       });
 
       return c.json(task);

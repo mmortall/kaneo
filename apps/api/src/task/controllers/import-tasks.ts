@@ -8,6 +8,11 @@ import {
   coerceStatus,
   getValidTaskStatuses,
 } from "../validate-task-fields";
+import {
+  assertTaskWorkflowPolicy,
+  isAiTaskCaller,
+  resolveTaskWorkflowFields,
+} from "../task-workflow-policy";
 import { claimTaskNumber } from "./claim-task-numbers";
 
 export type ImportTask = {
@@ -18,12 +23,18 @@ export type ImportTask = {
   startDate?: string | null;
   dueDate?: string | null;
   userId?: string | null;
+  goal?: string | null;
+  acceptanceCriteria?: string | null;
+  blockedReason?: string | null;
+  unblockPolicy?: string | null;
+  completionSummary?: string | null;
 };
 
 async function importTasks(
   projectId: string,
   tasksToImport: ImportTask[],
   currentUserId?: string,
+  caller?: string,
 ) {
   const project = await db.query.projectTable.findFirst({
     where: eq(projectTable.id, projectId),
@@ -50,6 +61,20 @@ async function importTasks(
       );
       const warnings = [statusWarning, priorityWarning].filter(Boolean);
 
+      const workflowFields = resolveTaskWorkflowFields(undefined, status, {
+        goal: taskData.goal,
+        acceptanceCriteria: taskData.acceptanceCriteria,
+        blockedReason: taskData.blockedReason,
+        unblockPolicy: taskData.unblockPolicy,
+        completionSummary: taskData.completionSummary,
+      });
+      assertTaskWorkflowPolicy({
+        isAiCaller: isAiTaskCaller(caller),
+        nextStatus: status,
+        isFinalStatus: status === "done",
+        fields: workflowFields,
+      });
+
       const column = await db.query.columnTable.findFirst({
         where: and(
           eq(columnTable.projectId, projectId),
@@ -71,6 +96,7 @@ async function importTasks(
             startDate: taskData.startDate ? new Date(taskData.startDate) : null,
             dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
             description: taskData.description || "",
+            ...workflowFields,
             priority,
             number: taskNumber,
           })

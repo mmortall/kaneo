@@ -37,6 +37,8 @@ type GetTasksOptions = {
     | "number";
   sortOrder?: "asc" | "desc";
   status?: string;
+  agentReadyOnly?: boolean;
+  unblockPolicy?: string;
 };
 
 const priorityCaseExpr = sql<number>`CASE
@@ -106,6 +108,16 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     conditions.push(gte(taskTable.dueDate, new Date(options.dueAfter)));
   }
 
+  if (options.agentReadyOnly) {
+    conditions.push(
+      sql`btrim(coalesce(${taskTable.goal}, '')) <> '' AND btrim(coalesce(${taskTable.acceptanceCriteria}, '')) <> ''`,
+    );
+  }
+
+  if (options.unblockPolicy) {
+    conditions.push(eq(taskTable.unblockPolicy, options.unblockPolicy));
+  }
+
   const whereClause = and(...conditions);
   const usePagination = options.page != null || options.limit != null;
   const page = options.page && options.page > 0 ? options.page : 1;
@@ -130,6 +142,11 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     title: taskTable.title,
     number: taskTable.number,
     description: taskTable.description,
+    goal: taskTable.goal,
+    acceptanceCriteria: taskTable.acceptanceCriteria,
+    blockedReason: taskTable.blockedReason,
+    unblockPolicy: taskTable.unblockPolicy,
+    completionSummary: taskTable.completionSummary,
     status: taskTable.status,
     priority: taskTable.priority,
     workItemType: taskTable.workItemType,
@@ -258,6 +275,14 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
       externalLinks: taskExternalLinksMap.get(task.id) || [],
     }));
 
+  const blockedTasks = paginatedTasks
+    .filter((task) => task.status === "blocked")
+    .map((task) => ({
+      ...task,
+      labels: taskLabelsMap.get(task.id) || [],
+      externalLinks: taskExternalLinksMap.get(task.id) || [],
+    }));
+
   return {
     data: {
       id: project.id,
@@ -270,6 +295,7 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
       columns,
       archivedTasks,
       plannedTasks,
+      blockedTasks,
     },
     pagination: usePagination
       ? {
