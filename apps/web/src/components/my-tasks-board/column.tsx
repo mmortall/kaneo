@@ -30,7 +30,7 @@ export function MyTasksColumn({
     <section
       ref={setNodeRef}
       className={cn(
-        "flex h-full min-h-0 w-80 shrink-0 flex-col rounded-xl border border-border/70 bg-muted/40 transition-[border-color,opacity,box-shadow] dark:bg-card/90",
+        "flex h-full min-h-0 w-[calc(100vw-1.5rem)] shrink-0 snap-start scroll-ml-3 flex-col rounded-xl border border-border/70 bg-muted/40 transition-[border-color,opacity,box-shadow] dark:bg-card/90 sm:w-80 md:snap-none",
         isOver && "border-ring/40 shadow-md ring-2 ring-ring/30",
         isDragging && !canDrop && "opacity-45",
       )}

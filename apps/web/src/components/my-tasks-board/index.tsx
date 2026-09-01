@@ -192,8 +192,8 @@ export default function MyTasksBoard({
       onDragCancel={() => setActiveTaskId(null)}
       onDragEnd={handleDragEnd}
     >
-      <div className="h-full overflow-x-auto [-webkit-overflow-scrolling:touch]">
-        <div className="flex h-full min-w-max gap-4 px-4 py-4 md:px-5">
+      <div className="h-full snap-x snap-mandatory overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch] md:snap-none">
+        <div className="flex h-full min-w-max gap-3 px-3 py-3 sm:gap-4 sm:px-4 sm:py-4 md:px-5">
           {columns.map((column) => (
             <MyTasksColumn
               key={column.id}

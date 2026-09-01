@@ -101,8 +101,8 @@ function RouteComponent() {
     <WorkspaceLayout title={t("tasks:myTasks.title")}>
       <PageTitle title={t("tasks:myTasks.title")} />
       <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="shrink-0 border-b border-border/80 bg-card/80 px-4 py-2">
-          <div className="flex min-h-10 flex-wrap items-center justify-between gap-3">
+        <div className="shrink-0 border-b border-border/80 bg-card/80 px-3 py-3 sm:px-4 sm:py-2">
+          <div className="flex min-h-10 flex-col items-stretch gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
             <div className="min-w-0">
               <h1 className="truncate text-sm font-semibold">
                 {t("tasks:myTasks.title")}
@@ -114,60 +114,74 @@ function RouteComponent() {
                 })}
               </p>
             </div>
-            <Tabs
-              value={category}
-              onValueChange={(value) =>
-                navigate({
-                  to: ".",
-                  search: { category: value as TaskCategory, horizon },
-                  replace: true,
-                })
-              }
-            >
-              <TabsList aria-label={t("tasks:categories.label")}>
-                {TASK_CATEGORY_TABS.map((tab) => (
-                  <TabsTab key={tab.value} value={tab.value}>
-                    {t(tab.labelKey)}
-                    <Badge variant="outline" size="sm">
-                      {t("tasks:myTasks.toDoCount", {
-                        count: toDoCounts[tab.value],
-                      })}
-                    </Badge>
-                  </TabsTab>
-                ))}
-              </TabsList>
-            </Tabs>
+            <div className="-mx-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <Tabs
+                className="w-max"
+                value={category}
+                onValueChange={(value) =>
+                  navigate({
+                    to: ".",
+                    search: { category: value as TaskCategory, horizon },
+                    replace: true,
+                  })
+                }
+              >
+                <TabsList
+                  className="w-max"
+                  aria-label={t("tasks:categories.label")}
+                >
+                  {TASK_CATEGORY_TABS.map((tab) => (
+                    <TabsTab
+                      key={tab.value}
+                      value={tab.value}
+                      className="shrink-0"
+                    >
+                      {t(tab.labelKey)}
+                      <Badge variant="outline" size="sm">
+                        {t("tasks:myTasks.toDoCount", {
+                          count: toDoCounts[tab.value],
+                        })}
+                      </Badge>
+                    </TabsTab>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2 pt-2">
+          <div className="pt-2">
             <span className="text-xs font-medium text-muted-foreground">
               {t("tasks:horizons.filterLabel")}
             </span>
-            <ToggleGroup
-              value={horizon ? [horizon] : []}
-              onValueChange={(value) =>
-                navigate({
-                  to: ".",
-                  search: {
-                    category,
-                    horizon: value[0] as TaskHorizon | undefined,
-                  },
-                  replace: true,
-                })
-              }
-              variant="outline"
-              size="sm"
-              aria-label={t("tasks:horizons.filterLabel")}
-            >
-              {TASK_HORIZONS.map((value) => (
-                <ToggleGroupItem
-                  key={value}
-                  value={value}
-                  title={t(`tasks:horizons.${value}.description`)}
-                >
-                  {t(`tasks:horizons.${value}.label`)}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+            <div className="-mx-1 mt-2 overflow-x-auto px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <ToggleGroup
+                className="w-max"
+                value={horizon ? [horizon] : []}
+                onValueChange={(value) =>
+                  navigate({
+                    to: ".",
+                    search: {
+                      category,
+                      horizon: value[0] as TaskHorizon | undefined,
+                    },
+                    replace: true,
+                  })
+                }
+                variant="outline"
+                size="sm"
+                aria-label={t("tasks:horizons.filterLabel")}
+              >
+                {TASK_HORIZONS.map((value) => (
+                  <ToggleGroupItem
+                    key={value}
+                    value={value}
+                    className="shrink-0"
+                    title={t(`tasks:horizons.${value}.description`)}
+                  >
+                    {t(`tasks:horizons.${value}.label`)}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </div>
           </div>
         </div>
 
