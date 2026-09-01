@@ -3,6 +3,8 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
+import type { TaskCategory } from "../task-category";
+import { normalizeTaskHorizons, type TaskHorizon } from "../task-horizon";
 import {
   assertTaskWorkflowPolicy,
   isAiTaskCaller,
@@ -22,6 +24,8 @@ async function createTask({
   description,
   priority,
   workItemType,
+  taskCategory,
+  strategyHorizons,
   goal,
   acceptanceCriteria,
   blockedReason,
@@ -39,6 +43,8 @@ async function createTask({
   description?: string;
   priority?: string;
   workItemType?: "task" | "epic" | "sub_epic";
+  taskCategory?: TaskCategory;
+  strategyHorizons?: TaskHorizon[];
   goal?: string;
   acceptanceCriteria?: string;
   blockedReason?: string;
@@ -112,6 +118,8 @@ async function createTask({
         ...workflowFields,
         priority: resolvedPriority,
         workItemType: workItemType ?? "task",
+        taskCategory: taskCategory ?? "live_implementation",
+        strategyHorizons: normalizeTaskHorizons(strategyHorizons),
         number: taskNumber,
         position: nextPosition,
       })

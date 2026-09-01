@@ -19,6 +19,9 @@
 						"cancel": {
 							"type": "string"
 						},
+						"retry": {
+							"type": "string"
+						},
 						"close": {
 							"type": "string"
 						},
@@ -49,6 +52,7 @@
 					},
 					"required": [
 						"cancel",
+						"retry",
 						"close",
 						"clearAll",
 						"delete",
@@ -4948,6 +4952,9 @@
 						"overview": {
 							"type": "string"
 						},
+						"myTasks": {
+							"type": "string"
+						},
 						"projects": {
 							"type": "string"
 						},
@@ -4966,6 +4973,7 @@
 					},
 					"required": [
 						"overview",
+						"myTasks",
 						"projects",
 						"members",
 						"invitations",
@@ -7221,6 +7229,190 @@
 					},
 					"required": ["addTask"]
 				},
+				"categories": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"label": {
+							"type": "string"
+						},
+						"liveImplementation": {
+							"type": "string"
+						},
+						"research": {
+							"type": "string"
+						},
+						"agentBlocker": {
+							"type": "string"
+						},
+						"updateError": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"label",
+						"liveImplementation",
+						"research",
+						"agentBlocker",
+						"updateError"
+					]
+				},
+				"horizons": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"label": {
+							"type": "string"
+						},
+						"filterLabel": {
+							"type": "string"
+						},
+						"none": {
+							"type": "string"
+						},
+						"updateError": {
+							"type": "string"
+						},
+						"short": {
+							"type": "object",
+							"additionalProperties": false,
+							"properties": {
+								"label": {
+									"type": "string"
+								},
+								"description": {
+									"type": "string"
+								}
+							},
+							"required": ["label", "description"]
+						},
+						"position": {
+							"type": "object",
+							"additionalProperties": false,
+							"properties": {
+								"label": {
+									"type": "string"
+								},
+								"description": {
+									"type": "string"
+								}
+							},
+							"required": ["label", "description"]
+						},
+						"long_term": {
+							"type": "object",
+							"additionalProperties": false,
+							"properties": {
+								"label": {
+									"type": "string"
+								},
+								"description": {
+									"type": "string"
+								}
+							},
+							"required": ["label", "description"]
+						},
+						"ultra_long_term": {
+							"type": "object",
+							"additionalProperties": false,
+							"properties": {
+								"label": {
+									"type": "string"
+								},
+								"description": {
+									"type": "string"
+								}
+							},
+							"required": ["label", "description"]
+						}
+					},
+					"required": [
+						"label",
+						"filterLabel",
+						"none",
+						"updateError",
+						"short",
+						"position",
+						"long_term",
+						"ultra_long_term"
+					]
+				},
+				"myTasks": {
+					"type": "object",
+					"additionalProperties": false,
+					"properties": {
+						"toDoCount": {
+							"type": "string"
+						},
+						"blockedColumn": {
+							"type": "string"
+						},
+						"emptyCategoryTitle": {
+							"type": "string"
+						},
+						"emptyCategoryDescription": {
+							"type": "string"
+						},
+						"emptyHorizonTitle": {
+							"type": "string"
+						},
+						"emptyHorizonDescription": {
+							"type": "string"
+						},
+						"title": {
+							"type": "string"
+						},
+						"summary": {
+							"type": "string"
+						},
+						"emptyTitle": {
+							"type": "string"
+						},
+						"emptyDescription": {
+							"type": "string"
+						},
+						"browseProjects": {
+							"type": "string"
+						},
+						"emptyColumn": {
+							"type": "string"
+						},
+						"statusUnavailable": {
+							"type": "string"
+						},
+						"statusUnavailableShort": {
+							"type": "string"
+						},
+						"statusUpdateError": {
+							"type": "string"
+						},
+						"errorTitle": {
+							"type": "string"
+						},
+						"errorDescription": {
+							"type": "string"
+						}
+					},
+					"required": [
+						"toDoCount",
+						"blockedColumn",
+						"emptyCategoryTitle",
+						"emptyCategoryDescription",
+						"emptyHorizonTitle",
+						"emptyHorizonDescription",
+						"title",
+						"summary",
+						"emptyTitle",
+						"emptyDescription",
+						"browseProjects",
+						"emptyColumn",
+						"statusUnavailable",
+						"statusUnavailableShort",
+						"statusUpdateError",
+						"errorTitle",
+						"errorDescription"
+					]
+				},
 				"pr": {
 					"type": "object",
 					"additionalProperties": false,
@@ -7546,6 +7738,9 @@
 				"archive",
 				"listView",
 				"kanban",
+				"categories",
+				"horizons",
+				"myTasks",
 				"pr",
 				"assignee",
 				"dueDate",

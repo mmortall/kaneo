@@ -125,7 +125,9 @@ async function bulkUpdateTasks({
           ),
         });
 
-        for (const task of tasks.filter((item) => item.projectId === projectId)) {
+        for (const task of tasks.filter(
+          (item) => item.projectId === projectId,
+        )) {
           assertTaskWorkflowPolicy({
             isAiCaller: aiCaller,
             existing: task,
@@ -140,7 +142,9 @@ async function bulkUpdateTasks({
           .filter((t) => t.projectId === projectId)
           .map((t) => t.id);
 
-        for (const task of tasks.filter((item) => item.projectId === projectId)) {
+        for (const task of tasks.filter(
+          (item) => item.projectId === projectId,
+        )) {
           const workflowFields = resolveTaskWorkflowFields(task, value, {});
           const result = await db
             .update(taskTable)

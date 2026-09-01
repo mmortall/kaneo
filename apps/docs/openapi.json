@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://cloud.kaneo.app/api",
+      "url": "https://admin.polyquantlabs.xyz/kaneo/api",
       "description": "Kaneo API Server"
     }
   ],
@@ -31,7 +31,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "nullable": true
+            "readOnly": true
           },
           "name": {
             "type": "string"
@@ -57,6 +57,7 @@
           }
         },
         "required": [
+          "id",
           "name",
           "slug",
           "createdAt"
@@ -67,7 +68,7 @@
         "properties": {
           "id": {
             "type": "string",
-            "nullable": true
+            "readOnly": true
           },
           "name": {
             "type": "string"
@@ -86,6 +87,7 @@
           }
         },
         "required": [
+          "id",
           "name",
           "organizationId",
           "createdAt"
@@ -255,6 +257,9 @@
                     "customOAuthLogoutUrl": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "billingEnabled": {
+                      "type": "boolean"
                     }
                   },
                   "required": [
@@ -270,7 +275,8 @@
                     "hasGuestAccess",
                     "disableLoginForm",
                     "customOAuthAutoLogin",
-                    "customOAuthLogoutUrl"
+                    "customOAuthLogoutUrl",
+                    "billingEnabled"
                   ]
                 }
               }
@@ -325,6 +331,429 @@
         "summary": "Get Device Authorization Page"
       }
     },
+    "/mcp/register": {
+      "post": {
+        "operationId": "registerMcpOAuthClient",
+        "tags": [
+          "MCP"
+        ],
+        "description": "Register a public OAuth client for the MCP endpoint",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Registered OAuth client",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "client_id": {
+                      "type": "string"
+                    },
+                    "client_id_issued_at": {
+                      "type": "number"
+                    },
+                    "redirect_uris": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "client_name": {
+                      "type": "string"
+                    },
+                    "token_endpoint_auth_method": {
+                      "const": "none"
+                    },
+                    "grant_types": {
+                      "type": "array",
+                      "items": {
+                        "const": "authorization_code"
+                      }
+                    },
+                    "response_types": {
+                      "type": "array",
+                      "items": {
+                        "const": "code"
+                      }
+                    }
+                  },
+                  "required": [
+                    "client_id",
+                    "client_id_issued_at",
+                    "redirect_uris",
+                    "token_endpoint_auth_method",
+                    "grant_types",
+                    "response_types"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid client metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "redirect_uris": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 2048
+                    },
+                    "minItems": 1
+                  },
+                  "client_name": {
+                    "type": "string",
+                    "maxLength": 100
+                  },
+                  "token_endpoint_auth_method": {
+                    "const": "none"
+                  },
+                  "grant_types": {
+                    "type": "array",
+                    "items": [
+                      {
+                        "const": "authorization_code"
+                      }
+                    ],
+                    "minItems": 1
+                  },
+                  "response_types": {
+                    "type": "array",
+                    "items": [
+                      {
+                        "const": "code"
+                      }
+                    ],
+                    "minItems": 1
+                  }
+                },
+                "required": [
+                  "redirect_uris"
+                ]
+              }
+            }
+          }
+        },
+        "summary": "Register Mcp OAuth Client"
+      }
+    },
+    "/mcp/authorize": {
+      "get": {
+        "operationId": "authorizeMcpOAuthClient",
+        "tags": [
+          "MCP"
+        ],
+        "description": "Start an explicit MCP OAuth consent request",
+        "security": [],
+        "responses": {
+          "302": {
+            "description": "Redirect to the Kaneo consent page"
+          },
+          "400": {
+            "description": "Invalid authorization request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "response_type",
+            "schema": {
+              "const": "code"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "client_id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "redirect_uri",
+            "schema": {
+              "type": "string",
+              "maxLength": 2048
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "code_challenge",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "code_challenge_method",
+            "schema": {
+              "const": "S256"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Authorize Mcp OAuth Client"
+      }
+    },
+    "/mcp/authorize/request/{requestId}": {
+      "get": {
+        "operationId": "getMcpAuthorizationRequest",
+        "tags": [
+          "MCP"
+        ],
+        "description": "Get display details for an MCP OAuth consent request",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Authorization request details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "client_name": {
+                      "type": "string"
+                    },
+                    "redirect_uri": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "client_name",
+                    "redirect_uri"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid OAuth client",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown or expired authorization request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get Mcp Authorization Request"
+      },
+      "post": {
+        "operationId": "decideMcpAuthorizationRequest",
+        "tags": [
+          "MCP"
+        ],
+        "description": "Approve or deny an MCP OAuth consent request",
+        "responses": {
+          "200": {
+            "description": "OAuth client redirect",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "redirect": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "redirect"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request or OAuth client",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Untrusted request origin",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown or expired authorization request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "requestId",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "approved": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "approved"
+                ]
+              }
+            }
+          }
+        },
+        "summary": "Decide Mcp Authorization Request"
+      }
+    },
     "/oauth/id-token": {
       "get": {
         "operationId": "getOAuthIdToken",
@@ -354,6 +783,105 @@
           }
         },
         "summary": "Get OAuth Id Token"
+      }
+    },
+    "/billing/{workspaceId}": {
+      "get": {
+        "operationId": "getWorkspaceBilling",
+        "tags": [
+          "Billing"
+        ],
+        "description": "Get the billing state and entitlement for a workspace. Returns billingEnabled: false everywhere when billing is not configured.",
+        "responses": {
+          "type": "object"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceId",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Get Workspace Billing"
+      }
+    },
+    "/billing/{workspaceId}/checkout": {
+      "post": {
+        "operationId": "createBillingCheckout",
+        "tags": [
+          "Billing"
+        ],
+        "description": "Create a Creem checkout session for a workspace plan. Owner/admin only. Returns the checkout URL to redirect the browser to.",
+        "responses": {
+          "type": "object"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceId",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "plan": {
+                    "enum": [
+                      "personal",
+                      "team"
+                    ],
+                    "type": "string"
+                  },
+                  "interval": {
+                    "enum": [
+                      "monthly",
+                      "annual"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "plan",
+                  "interval"
+                ]
+              }
+            }
+          }
+        },
+        "summary": "Create Billing Checkout"
+      }
+    },
+    "/billing/{workspaceId}/portal": {
+      "post": {
+        "operationId": "createBillingPortalSession",
+        "tags": [
+          "Billing"
+        ],
+        "description": "Generate a Creem customer portal link for the workspace subscription. Owner/admin only.",
+        "responses": {
+          "type": "object"
+        },
+        "parameters": [
+          {
+            "in": "path",
+            "name": "workspaceId",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Create Billing Portal Session"
       }
     },
     "/project": {
@@ -1048,6 +1576,48 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "workItemType",
+            "schema": {
+              "enum": [
+                "task",
+                "epic",
+                "sub_epic"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "taskCategory",
+            "schema": {
+              "enum": [
+                "live_implementation",
+                "research",
+                "agent_blocker"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "agentReadyOnly",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "unblockPolicy",
+            "schema": {
+              "enum": [
+                "ai_allowed",
+                "human_required"
+              ],
+              "type": "string"
+            }
           }
         ],
         "summary": "List Tasks"
@@ -1113,6 +1683,9 @@
                   "value": {
                     "type": "string",
                     "nullable": true
+                  },
+                  "unblockNote": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -1166,6 +1739,26 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "goal": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "acceptanceCriteria": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blockedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unblockPolicy": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completionSummary": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -1178,6 +1771,34 @@
                         "urgent"
                       ],
                       "type": "string"
+                    },
+                    "workItemType": {
+                      "enum": [
+                        "task",
+                        "epic",
+                        "sub_epic"
+                      ],
+                      "type": "string"
+                    },
+                    "taskCategory": {
+                      "enum": [
+                        "live_implementation",
+                        "research",
+                        "agent_blocker"
+                      ],
+                      "type": "string"
+                    },
+                    "strategyHorizons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "short",
+                          "position",
+                          "long_term",
+                          "ultra_long_term"
+                        ],
+                        "type": "string"
+                      }
                     },
                     "startDate": {
                       "type": "string",
@@ -1200,8 +1821,16 @@
                     "userId",
                     "title",
                     "description",
+                    "goal",
+                    "acceptanceCriteria",
+                    "blockedReason",
+                    "unblockPolicy",
+                    "completionSummary",
                     "status",
                     "priority",
+                    "workItemType",
+                    "taskCategory",
+                    "strategyHorizons",
                     "createdAt"
                   ]
                 }
@@ -1242,6 +1871,53 @@
                     "type": "string"
                   },
                   "userId": {
+                    "type": "string"
+                  },
+                  "workItemType": {
+                    "enum": [
+                      "task",
+                      "epic",
+                      "sub_epic"
+                    ],
+                    "type": "string"
+                  },
+                  "taskCategory": {
+                    "enum": [
+                      "live_implementation",
+                      "research",
+                      "agent_blocker"
+                    ],
+                    "type": "string"
+                  },
+                  "strategyHorizons": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "short",
+                        "position",
+                        "long_term",
+                        "ultra_long_term"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "goal": {
+                    "type": "string"
+                  },
+                  "acceptanceCriteria": {
+                    "type": "string"
+                  },
+                  "blockedReason": {
+                    "type": "string"
+                  },
+                  "unblockPolicy": {
+                    "enum": [
+                      "ai_allowed",
+                      "human_required"
+                    ],
+                    "type": "string"
+                  },
+                  "completionSummary": {
                     "type": "string"
                   }
                 },
@@ -1308,6 +1984,26 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "goal": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "acceptanceCriteria": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blockedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unblockPolicy": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completionSummary": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -1320,6 +2016,34 @@
                         "urgent"
                       ],
                       "type": "string"
+                    },
+                    "workItemType": {
+                      "enum": [
+                        "task",
+                        "epic",
+                        "sub_epic"
+                      ],
+                      "type": "string"
+                    },
+                    "taskCategory": {
+                      "enum": [
+                        "live_implementation",
+                        "research",
+                        "agent_blocker"
+                      ],
+                      "type": "string"
+                    },
+                    "strategyHorizons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "short",
+                          "position",
+                          "long_term",
+                          "ultra_long_term"
+                        ],
+                        "type": "string"
+                      }
                     },
                     "startDate": {
                       "type": "string",
@@ -1342,8 +2066,16 @@
                     "userId",
                     "title",
                     "description",
+                    "goal",
+                    "acceptanceCriteria",
+                    "blockedReason",
+                    "unblockPolicy",
+                    "completionSummary",
                     "status",
                     "priority",
+                    "workItemType",
+                    "taskCategory",
+                    "strategyHorizons",
                     "createdAt"
                   ]
                 }
@@ -1402,6 +2134,26 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "goal": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "acceptanceCriteria": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blockedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unblockPolicy": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completionSummary": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -1414,6 +2166,34 @@
                         "urgent"
                       ],
                       "type": "string"
+                    },
+                    "workItemType": {
+                      "enum": [
+                        "task",
+                        "epic",
+                        "sub_epic"
+                      ],
+                      "type": "string"
+                    },
+                    "taskCategory": {
+                      "enum": [
+                        "live_implementation",
+                        "research",
+                        "agent_blocker"
+                      ],
+                      "type": "string"
+                    },
+                    "strategyHorizons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "short",
+                          "position",
+                          "long_term",
+                          "ultra_long_term"
+                        ],
+                        "type": "string"
+                      }
                     },
                     "startDate": {
                       "type": "string",
@@ -1436,8 +2216,16 @@
                     "userId",
                     "title",
                     "description",
+                    "goal",
+                    "acceptanceCriteria",
+                    "blockedReason",
+                    "unblockPolicy",
+                    "completionSummary",
                     "status",
                     "priority",
+                    "workItemType",
+                    "taskCategory",
+                    "strategyHorizons",
                     "createdAt"
                   ]
                 }
@@ -1495,6 +2283,56 @@
                   },
                   "userId": {
                     "type": "string"
+                  },
+                  "workItemType": {
+                    "enum": [
+                      "task",
+                      "epic",
+                      "sub_epic"
+                    ],
+                    "type": "string"
+                  },
+                  "taskCategory": {
+                    "enum": [
+                      "live_implementation",
+                      "research",
+                      "agent_blocker"
+                    ],
+                    "type": "string"
+                  },
+                  "strategyHorizons": {
+                    "type": "array",
+                    "items": {
+                      "enum": [
+                        "short",
+                        "position",
+                        "long_term",
+                        "ultra_long_term"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "goal": {
+                    "type": "string"
+                  },
+                  "acceptanceCriteria": {
+                    "type": "string"
+                  },
+                  "blockedReason": {
+                    "type": "string"
+                  },
+                  "unblockPolicy": {
+                    "enum": [
+                      "ai_allowed",
+                      "human_required"
+                    ],
+                    "type": "string"
+                  },
+                  "completionSummary": {
+                    "type": "string"
+                  },
+                  "unblockNote": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -1550,6 +2388,26 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "goal": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "acceptanceCriteria": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blockedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unblockPolicy": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completionSummary": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -1562,6 +2420,34 @@
                         "urgent"
                       ],
                       "type": "string"
+                    },
+                    "workItemType": {
+                      "enum": [
+                        "task",
+                        "epic",
+                        "sub_epic"
+                      ],
+                      "type": "string"
+                    },
+                    "taskCategory": {
+                      "enum": [
+                        "live_implementation",
+                        "research",
+                        "agent_blocker"
+                      ],
+                      "type": "string"
+                    },
+                    "strategyHorizons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "short",
+                          "position",
+                          "long_term",
+                          "ultra_long_term"
+                        ],
+                        "type": "string"
+                      }
                     },
                     "startDate": {
                       "type": "string",
@@ -1584,8 +2470,16 @@
                     "userId",
                     "title",
                     "description",
+                    "goal",
+                    "acceptanceCriteria",
+                    "blockedReason",
+                    "unblockPolicy",
+                    "completionSummary",
                     "status",
                     "priority",
+                    "workItemType",
+                    "taskCategory",
+                    "strategyHorizons",
                     "createdAt"
                   ]
                 }
@@ -1649,6 +2543,26 @@
                           "type": "string",
                           "nullable": true
                         },
+                        "goal": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "acceptanceCriteria": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "blockedReason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "unblockPolicy": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "completionSummary": {
+                          "type": "string",
+                          "nullable": true
+                        },
                         "status": {
                           "type": "string"
                         },
@@ -1661,6 +2575,34 @@
                             "urgent"
                           ],
                           "type": "string"
+                        },
+                        "workItemType": {
+                          "enum": [
+                            "task",
+                            "epic",
+                            "sub_epic"
+                          ],
+                          "type": "string"
+                        },
+                        "taskCategory": {
+                          "enum": [
+                            "live_implementation",
+                            "research",
+                            "agent_blocker"
+                          ],
+                          "type": "string"
+                        },
+                        "strategyHorizons": {
+                          "type": "array",
+                          "items": {
+                            "enum": [
+                              "short",
+                              "position",
+                              "long_term",
+                              "ultra_long_term"
+                            ],
+                            "type": "string"
+                          }
                         },
                         "startDate": {
                           "type": "string",
@@ -1683,8 +2625,16 @@
                         "userId",
                         "title",
                         "description",
+                        "goal",
+                        "acceptanceCriteria",
+                        "blockedReason",
+                        "unblockPolicy",
+                        "completionSummary",
                         "status",
                         "priority",
+                        "workItemType",
+                        "taskCategory",
+                        "strategyHorizons",
                         "createdAt"
                       ]
                     },
@@ -1726,6 +2676,9 @@
                     "type": "string"
                   },
                   "destinationStatus": {
+                    "type": "string"
+                  },
+                  "unblockNote": {
                     "type": "string"
                   }
                 },
@@ -1835,6 +2788,46 @@
                         "userId": {
                           "type": "string",
                           "nullable": true
+                        },
+                        "taskCategory": {
+                          "enum": [
+                            "live_implementation",
+                            "research",
+                            "agent_blocker"
+                          ],
+                          "type": "string"
+                        },
+                        "strategyHorizons": {
+                          "type": "array",
+                          "items": {
+                            "enum": [
+                              "short",
+                              "position",
+                              "long_term",
+                              "ultra_long_term"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "goal": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "acceptanceCriteria": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "blockedReason": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "unblockPolicy": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "completionSummary": {
+                          "type": "string",
+                          "nullable": true
                         }
                       },
                       "required": [
@@ -1894,6 +2887,26 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "goal": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "acceptanceCriteria": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blockedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unblockPolicy": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completionSummary": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -1906,6 +2919,34 @@
                         "urgent"
                       ],
                       "type": "string"
+                    },
+                    "workItemType": {
+                      "enum": [
+                        "task",
+                        "epic",
+                        "sub_epic"
+                      ],
+                      "type": "string"
+                    },
+                    "taskCategory": {
+                      "enum": [
+                        "live_implementation",
+                        "research",
+                        "agent_blocker"
+                      ],
+                      "type": "string"
+                    },
+                    "strategyHorizons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "short",
+                          "position",
+                          "long_term",
+                          "ultra_long_term"
+                        ],
+                        "type": "string"
+                      }
                     },
                     "startDate": {
                       "type": "string",
@@ -1928,8 +2969,16 @@
                     "userId",
                     "title",
                     "description",
+                    "goal",
+                    "acceptanceCriteria",
+                    "blockedReason",
+                    "unblockPolicy",
+                    "completionSummary",
                     "status",
                     "priority",
+                    "workItemType",
+                    "taskCategory",
+                    "strategyHorizons",
                     "createdAt"
                   ]
                 }
@@ -1955,6 +3004,28 @@
                 "type": "object",
                 "properties": {
                   "status": {
+                    "type": "string"
+                  },
+                  "goal": {
+                    "type": "string"
+                  },
+                  "acceptanceCriteria": {
+                    "type": "string"
+                  },
+                  "blockedReason": {
+                    "type": "string"
+                  },
+                  "unblockPolicy": {
+                    "enum": [
+                      "ai_allowed",
+                      "human_required"
+                    ],
+                    "type": "string"
+                  },
+                  "completionSummary": {
+                    "type": "string"
+                  },
+                  "unblockNote": {
                     "type": "string"
                   }
                 },
@@ -2008,6 +3079,26 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "goal": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "acceptanceCriteria": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blockedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unblockPolicy": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completionSummary": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -2020,6 +3111,34 @@
                         "urgent"
                       ],
                       "type": "string"
+                    },
+                    "workItemType": {
+                      "enum": [
+                        "task",
+                        "epic",
+                        "sub_epic"
+                      ],
+                      "type": "string"
+                    },
+                    "taskCategory": {
+                      "enum": [
+                        "live_implementation",
+                        "research",
+                        "agent_blocker"
+                      ],
+                      "type": "string"
+                    },
+                    "strategyHorizons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "short",
+                          "position",
+                          "long_term",
+                          "ultra_long_term"
+                        ],
+                        "type": "string"
+                      }
                     },
                     "startDate": {
                       "type": "string",
@@ -2042,8 +3161,16 @@
                     "userId",
                     "title",
                     "description",
+                    "goal",
+                    "acceptanceCriteria",
+                    "blockedReason",
+                    "unblockPolicy",
+                    "completionSummary",
                     "status",
                     "priority",
+                    "workItemType",
+                    "taskCategory",
+                    "strategyHorizons",
                     "createdAt"
                   ]
                 }
@@ -2129,6 +3256,26 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "goal": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "acceptanceCriteria": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blockedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unblockPolicy": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completionSummary": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -2141,6 +3288,34 @@
                         "urgent"
                       ],
                       "type": "string"
+                    },
+                    "workItemType": {
+                      "enum": [
+                        "task",
+                        "epic",
+                        "sub_epic"
+                      ],
+                      "type": "string"
+                    },
+                    "taskCategory": {
+                      "enum": [
+                        "live_implementation",
+                        "research",
+                        "agent_blocker"
+                      ],
+                      "type": "string"
+                    },
+                    "strategyHorizons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "short",
+                          "position",
+                          "long_term",
+                          "ultra_long_term"
+                        ],
+                        "type": "string"
+                      }
                     },
                     "startDate": {
                       "type": "string",
@@ -2163,8 +3338,16 @@
                     "userId",
                     "title",
                     "description",
+                    "goal",
+                    "acceptanceCriteria",
+                    "blockedReason",
+                    "unblockPolicy",
+                    "completionSummary",
                     "status",
                     "priority",
+                    "workItemType",
+                    "taskCategory",
+                    "strategyHorizons",
                     "createdAt"
                   ]
                 }
@@ -2244,6 +3427,26 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "goal": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "acceptanceCriteria": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blockedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unblockPolicy": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completionSummary": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -2256,6 +3459,34 @@
                         "urgent"
                       ],
                       "type": "string"
+                    },
+                    "workItemType": {
+                      "enum": [
+                        "task",
+                        "epic",
+                        "sub_epic"
+                      ],
+                      "type": "string"
+                    },
+                    "taskCategory": {
+                      "enum": [
+                        "live_implementation",
+                        "research",
+                        "agent_blocker"
+                      ],
+                      "type": "string"
+                    },
+                    "strategyHorizons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "short",
+                          "position",
+                          "long_term",
+                          "ultra_long_term"
+                        ],
+                        "type": "string"
+                      }
                     },
                     "startDate": {
                       "type": "string",
@@ -2278,8 +3509,16 @@
                     "userId",
                     "title",
                     "description",
+                    "goal",
+                    "acceptanceCriteria",
+                    "blockedReason",
+                    "unblockPolicy",
+                    "completionSummary",
                     "status",
                     "priority",
+                    "workItemType",
+                    "taskCategory",
+                    "strategyHorizons",
                     "createdAt"
                   ]
                 }
@@ -2355,6 +3594,26 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "goal": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "acceptanceCriteria": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blockedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unblockPolicy": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completionSummary": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -2367,6 +3626,34 @@
                         "urgent"
                       ],
                       "type": "string"
+                    },
+                    "workItemType": {
+                      "enum": [
+                        "task",
+                        "epic",
+                        "sub_epic"
+                      ],
+                      "type": "string"
+                    },
+                    "taskCategory": {
+                      "enum": [
+                        "live_implementation",
+                        "research",
+                        "agent_blocker"
+                      ],
+                      "type": "string"
+                    },
+                    "strategyHorizons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "short",
+                          "position",
+                          "long_term",
+                          "ultra_long_term"
+                        ],
+                        "type": "string"
+                      }
                     },
                     "startDate": {
                       "type": "string",
@@ -2389,8 +3676,16 @@
                     "userId",
                     "title",
                     "description",
+                    "goal",
+                    "acceptanceCriteria",
+                    "blockedReason",
+                    "unblockPolicy",
+                    "completionSummary",
                     "status",
                     "priority",
+                    "workItemType",
+                    "taskCategory",
+                    "strategyHorizons",
                     "createdAt"
                   ]
                 }
@@ -2605,6 +3900,26 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "goal": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "acceptanceCriteria": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "blockedReason": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unblockPolicy": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "completionSummary": {
+                      "type": "string",
+                      "nullable": true
+                    },
                     "status": {
                       "type": "string"
                     },
@@ -2617,6 +3932,34 @@
                         "urgent"
                       ],
                       "type": "string"
+                    },
+                    "workItemType": {
+                      "enum": [
+                        "task",
+                        "epic",
+                        "sub_epic"
+                      ],
+                      "type": "string"
+                    },
+                    "taskCategory": {
+                      "enum": [
+                        "live_implementation",
+                        "research",
+                        "agent_blocker"
+                      ],
+                      "type": "string"
+                    },
+                    "strategyHorizons": {
+                      "type": "array",
+                      "items": {
+                        "enum": [
+                          "short",
+                          "position",
+                          "long_term",
+                          "ultra_long_term"
+                        ],
+                        "type": "string"
+                      }
                     },
                     "startDate": {
                       "type": "string",
@@ -2639,8 +3982,16 @@
                     "userId",
                     "title",
                     "description",
+                    "goal",
+                    "acceptanceCriteria",
+                    "blockedReason",
+                    "unblockPolicy",
+                    "completionSummary",
                     "status",
                     "priority",
+                    "workItemType",
+                    "taskCategory",
+                    "strategyHorizons",
                     "createdAt"
                   ]
                 }
@@ -4791,7 +6142,8 @@
                           "time_entry_created",
                           "due_date_reminder",
                           "task_overdue",
-                          "task_mention"
+                          "task_mention",
+                          "task_comment"
                         ],
                         "type": "string"
                       },
@@ -4878,7 +6230,8 @@
                         "time_entry_created",
                         "due_date_reminder",
                         "task_overdue",
-                        "task_mention"
+                        "task_mention",
+                        "task_comment"
                       ],
                       "type": "string"
                     },
@@ -5003,7 +6356,8 @@
                         "time_entry_created",
                         "due_date_reminder",
                         "task_overdue",
-                        "task_mention"
+                        "task_mention",
+                        "task_comment"
                       ],
                       "type": "string"
                     },
@@ -5205,6 +6559,21 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "taskAssignmentEnabled": {
+                      "type": "boolean"
+                    },
+                    "taskCommentEnabled": {
+                      "type": "boolean"
+                    },
+                    "taskStatusChangeEnabled": {
+                      "type": "boolean"
+                    },
+                    "dueDateReminderEnabled": {
+                      "type": "boolean"
+                    },
+                    "dueDateReminderLeadTimeMinutes": {
+                      "type": "number"
+                    },
                     "workspaces": {
                       "type": "array",
                       "items": {
@@ -5298,6 +6667,11 @@
                     "webhookUrl",
                     "webhookSecretConfigured",
                     "maskedWebhookSecret",
+                    "taskAssignmentEnabled",
+                    "taskCommentEnabled",
+                    "taskStatusChangeEnabled",
+                    "dueDateReminderEnabled",
+                    "dueDateReminderLeadTimeMinutes",
                     "workspaces",
                     "createdAt",
                     "updatedAt"
@@ -5439,6 +6813,21 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "taskAssignmentEnabled": {
+                      "type": "boolean"
+                    },
+                    "taskCommentEnabled": {
+                      "type": "boolean"
+                    },
+                    "taskStatusChangeEnabled": {
+                      "type": "boolean"
+                    },
+                    "dueDateReminderEnabled": {
+                      "type": "boolean"
+                    },
+                    "dueDateReminderLeadTimeMinutes": {
+                      "type": "number"
+                    },
                     "workspaces": {
                       "type": "array",
                       "items": {
@@ -5532,6 +6921,11 @@
                     "webhookUrl",
                     "webhookSecretConfigured",
                     "maskedWebhookSecret",
+                    "taskAssignmentEnabled",
+                    "taskCommentEnabled",
+                    "taskStatusChangeEnabled",
+                    "dueDateReminderEnabled",
+                    "dueDateReminderLeadTimeMinutes",
                     "workspaces",
                     "createdAt",
                     "updatedAt"
@@ -5641,6 +7035,23 @@
                   "webhookSecret": {
                     "type": "string",
                     "nullable": true
+                  },
+                  "taskAssignmentEnabled": {
+                    "type": "boolean"
+                  },
+                  "taskCommentEnabled": {
+                    "type": "boolean"
+                  },
+                  "taskStatusChangeEnabled": {
+                    "type": "boolean"
+                  },
+                  "dueDateReminderEnabled": {
+                    "type": "boolean"
+                  },
+                  "dueDateReminderLeadTimeMinutes": {
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 43200
                   }
                 }
               }
@@ -5726,6 +7137,21 @@
                     "maskedWebhookSecret": {
                       "type": "string",
                       "nullable": true
+                    },
+                    "taskAssignmentEnabled": {
+                      "type": "boolean"
+                    },
+                    "taskCommentEnabled": {
+                      "type": "boolean"
+                    },
+                    "taskStatusChangeEnabled": {
+                      "type": "boolean"
+                    },
+                    "dueDateReminderEnabled": {
+                      "type": "boolean"
+                    },
+                    "dueDateReminderLeadTimeMinutes": {
+                      "type": "number"
                     },
                     "workspaces": {
                       "type": "array",
@@ -5820,6 +7246,11 @@
                     "webhookUrl",
                     "webhookSecretConfigured",
                     "maskedWebhookSecret",
+                    "taskAssignmentEnabled",
+                    "taskCommentEnabled",
+                    "taskStatusChangeEnabled",
+                    "dueDateReminderEnabled",
+                    "dueDateReminderLeadTimeMinutes",
                     "workspaces",
                     "createdAt",
                     "updatedAt"
@@ -6019,6 +7450,21 @@
                       "type": "string",
                       "nullable": true
                     },
+                    "taskAssignmentEnabled": {
+                      "type": "boolean"
+                    },
+                    "taskCommentEnabled": {
+                      "type": "boolean"
+                    },
+                    "taskStatusChangeEnabled": {
+                      "type": "boolean"
+                    },
+                    "dueDateReminderEnabled": {
+                      "type": "boolean"
+                    },
+                    "dueDateReminderLeadTimeMinutes": {
+                      "type": "number"
+                    },
                     "workspaces": {
                       "type": "array",
                       "items": {
@@ -6112,6 +7558,11 @@
                     "webhookUrl",
                     "webhookSecretConfigured",
                     "maskedWebhookSecret",
+                    "taskAssignmentEnabled",
+                    "taskCommentEnabled",
+                    "taskStatusChangeEnabled",
+                    "dueDateReminderEnabled",
+                    "dueDateReminderLeadTimeMinutes",
                     "workspaces",
                     "createdAt",
                     "updatedAt"
@@ -6251,6 +7702,26 @@
                             "type": "string",
                             "nullable": true
                           },
+                          "goal": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "acceptanceCriteria": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "blockedReason": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "unblockPolicy": {
+                            "type": "string",
+                            "nullable": true
+                          },
+                          "completionSummary": {
+                            "type": "string",
+                            "nullable": true
+                          },
                           "status": {
                             "type": "string"
                           },
@@ -6263,6 +7734,34 @@
                               "urgent"
                             ],
                             "type": "string"
+                          },
+                          "workItemType": {
+                            "enum": [
+                              "task",
+                              "epic",
+                              "sub_epic"
+                            ],
+                            "type": "string"
+                          },
+                          "taskCategory": {
+                            "enum": [
+                              "live_implementation",
+                              "research",
+                              "agent_blocker"
+                            ],
+                            "type": "string"
+                          },
+                          "strategyHorizons": {
+                            "type": "array",
+                            "items": {
+                              "enum": [
+                                "short",
+                                "position",
+                                "long_term",
+                                "ultra_long_term"
+                              ],
+                              "type": "string"
+                            }
                           },
                           "startDate": {
                             "type": "string",
@@ -6285,8 +7784,16 @@
                           "userId",
                           "title",
                           "description",
+                          "goal",
+                          "acceptanceCriteria",
+                          "blockedReason",
+                          "unblockPolicy",
+                          "completionSummary",
                           "status",
                           "priority",
+                          "workItemType",
+                          "taskCategory",
+                          "strategyHorizons",
                           "createdAt"
                         ]
                       }
@@ -6561,8 +8068,8 @@
                 "comments",
                 "activities"
               ],
-              "default": "all",
-              "type": "string"
+              "type": "string",
+              "default": "all"
             }
           },
           {
@@ -6586,7 +8093,7 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 50,
-              "default": 20
+              "default": "20"
             }
           },
           {
@@ -6708,15 +8215,56 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "installed": {
+                    "isInstalled": {
                       "type": "boolean"
                     },
+                    "installationId": {
+                      "type": "number",
+                      "nullable": true
+                    },
+                    "repositoryExists": {
+                      "type": "boolean",
+                      "nullable": true
+                    },
+                    "repositoryPrivate": {
+                      "type": "boolean",
+                      "nullable": true
+                    },
+                    "permissions": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      },
+                      "nullable": true
+                    },
+                    "hasRequiredPermissions": {
+                      "type": "boolean"
+                    },
+                    "missingPermissions": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "message": {
+                      "type": "string"
+                    },
+                    "settingsUrl": {
+                      "type": "string"
+                    },
+                    "installationUrl": {
                       "type": "string"
                     }
                   },
                   "required": [
-                    "installed"
+                    "isInstalled",
+                    "installationId",
+                    "repositoryExists",
+                    "repositoryPrivate",
+                    "permissions",
+                    "hasRequiredPermissions",
+                    "missingPermissions",
+                    "message"
                   ]
                 }
               }
@@ -7247,9 +8795,13 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "baseUrl": {
+                  "projectId": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "baseUrl": {
+                    "type": "string",
+                    "format": "uri"
                   },
                   "accessToken": {
                     "type": "string",
@@ -7257,6 +8809,7 @@
                   }
                 },
                 "required": [
+                  "projectId",
                   "baseUrl",
                   "accessToken"
                 ]
@@ -7325,9 +8878,13 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "baseUrl": {
+                  "projectId": {
                     "type": "string",
                     "minLength": 1
+                  },
+                  "baseUrl": {
+                    "type": "string",
+                    "format": "uri"
                   },
                   "accessToken": {
                     "type": "string",
@@ -7343,6 +8900,7 @@
                   }
                 },
                 "required": [
+                  "projectId",
                   "baseUrl",
                   "accessToken",
                   "repositoryOwner",
@@ -7822,6 +9380,24 @@
                         },
                         "taskCommentCreated": {
                           "type": "boolean"
+                        },
+                        "taskDeleted": {
+                          "type": "boolean"
+                        },
+                        "taskMoved": {
+                          "type": "boolean"
+                        },
+                        "taskDueDateChanged": {
+                          "type": "boolean"
+                        },
+                        "taskAssigneeChanged": {
+                          "type": "boolean"
+                        },
+                        "taskUnassigned": {
+                          "type": "boolean"
+                        },
+                        "dueDateReminder": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -7830,8 +9406,17 @@
                         "taskPriorityChanged",
                         "taskTitleChanged",
                         "taskDescriptionChanged",
-                        "taskCommentCreated"
+                        "taskCommentCreated",
+                        "taskDeleted",
+                        "taskMoved",
+                        "taskDueDateChanged",
+                        "taskAssigneeChanged",
+                        "taskUnassigned",
+                        "dueDateReminder"
                       ]
+                    },
+                    "dueDateReminderLeadTimeMinutes": {
+                      "type": "number"
                     },
                     "isActive": {
                       "type": "boolean",
@@ -7854,6 +9439,7 @@
                     "secretConfigured",
                     "maskedSecret",
                     "events",
+                    "dueDateReminderLeadTimeMinutes",
                     "isActive",
                     "createdAt",
                     "updatedAt"
@@ -7930,6 +9516,24 @@
                         },
                         "taskCommentCreated": {
                           "type": "boolean"
+                        },
+                        "taskDeleted": {
+                          "type": "boolean"
+                        },
+                        "taskMoved": {
+                          "type": "boolean"
+                        },
+                        "taskDueDateChanged": {
+                          "type": "boolean"
+                        },
+                        "taskAssigneeChanged": {
+                          "type": "boolean"
+                        },
+                        "taskUnassigned": {
+                          "type": "boolean"
+                        },
+                        "dueDateReminder": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -7938,8 +9542,17 @@
                         "taskPriorityChanged",
                         "taskTitleChanged",
                         "taskDescriptionChanged",
-                        "taskCommentCreated"
+                        "taskCommentCreated",
+                        "taskDeleted",
+                        "taskMoved",
+                        "taskDueDateChanged",
+                        "taskAssigneeChanged",
+                        "taskUnassigned",
+                        "dueDateReminder"
                       ]
+                    },
+                    "dueDateReminderLeadTimeMinutes": {
+                      "type": "number"
                     },
                     "isActive": {
                       "type": "boolean",
@@ -7962,6 +9575,7 @@
                     "secretConfigured",
                     "maskedSecret",
                     "events",
+                    "dueDateReminderLeadTimeMinutes",
                     "isActive",
                     "createdAt",
                     "updatedAt"
@@ -8015,8 +9629,31 @@
                       },
                       "taskCommentCreated": {
                         "type": "boolean"
+                      },
+                      "taskDeleted": {
+                        "type": "boolean"
+                      },
+                      "taskMoved": {
+                        "type": "boolean"
+                      },
+                      "taskDueDateChanged": {
+                        "type": "boolean"
+                      },
+                      "taskAssigneeChanged": {
+                        "type": "boolean"
+                      },
+                      "taskUnassigned": {
+                        "type": "boolean"
+                      },
+                      "dueDateReminder": {
+                        "type": "boolean"
                       }
                     }
+                  },
+                  "dueDateReminderLeadTimeMinutes": {
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 43200
                   }
                 },
                 "required": [
@@ -8082,6 +9719,24 @@
                         },
                         "taskCommentCreated": {
                           "type": "boolean"
+                        },
+                        "taskDeleted": {
+                          "type": "boolean"
+                        },
+                        "taskMoved": {
+                          "type": "boolean"
+                        },
+                        "taskDueDateChanged": {
+                          "type": "boolean"
+                        },
+                        "taskAssigneeChanged": {
+                          "type": "boolean"
+                        },
+                        "taskUnassigned": {
+                          "type": "boolean"
+                        },
+                        "dueDateReminder": {
+                          "type": "boolean"
                         }
                       },
                       "required": [
@@ -8090,8 +9745,17 @@
                         "taskPriorityChanged",
                         "taskTitleChanged",
                         "taskDescriptionChanged",
-                        "taskCommentCreated"
+                        "taskCommentCreated",
+                        "taskDeleted",
+                        "taskMoved",
+                        "taskDueDateChanged",
+                        "taskAssigneeChanged",
+                        "taskUnassigned",
+                        "dueDateReminder"
                       ]
+                    },
+                    "dueDateReminderLeadTimeMinutes": {
+                      "type": "number"
                     },
                     "isActive": {
                       "type": "boolean",
@@ -8114,6 +9778,7 @@
                     "secretConfigured",
                     "maskedSecret",
                     "events",
+                    "dueDateReminderLeadTimeMinutes",
                     "isActive",
                     "createdAt",
                     "updatedAt"
@@ -8170,8 +9835,31 @@
                       },
                       "taskCommentCreated": {
                         "type": "boolean"
+                      },
+                      "taskDeleted": {
+                        "type": "boolean"
+                      },
+                      "taskMoved": {
+                        "type": "boolean"
+                      },
+                      "taskDueDateChanged": {
+                        "type": "boolean"
+                      },
+                      "taskAssigneeChanged": {
+                        "type": "boolean"
+                      },
+                      "taskUnassigned": {
+                        "type": "boolean"
+                      },
+                      "dueDateReminder": {
+                        "type": "boolean"
                       }
                     }
+                  },
+                  "dueDateReminderLeadTimeMinutes": {
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 43200
                   }
                 }
               }
@@ -10164,16 +11852,17 @@
                 "properties": {
                   "name": {
                     "type": "string",
+                    "minLength": 1,
                     "description": "The name of the organization"
                   },
                   "slug": {
                     "type": "string",
+                    "minLength": 1,
                     "description": "The slug of the organization"
                   },
                   "userId": {
                     "type": "string",
-                    "description": "The user id of the organization creator. If not provided, the current user will be used. Should only be used by admins or when called by the server. server-only. Eg: \"user-id\"",
-                    "nullable": true
+                    "description": "The user id of the organization creator. If not provided, the current user will be used. Should only be used by admins or when called by the server. server-only. Eg: \"user-id\""
                   },
                   "logo": {
                     "type": "string",
@@ -10181,14 +11870,13 @@
                     "nullable": true
                   },
                   "metadata": {
-                    "type": "string",
-                    "description": "The metadata of the organization",
-                    "nullable": true
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "The metadata of the organization"
                   },
                   "keepCurrentActiveOrganization": {
                     "type": "boolean",
-                    "description": "Whether to keep the current active organization active after creating a new one. Eg: true",
-                    "nullable": true
+                    "description": "Whether to keep the current active organization active after creating a new one. Eg: true"
                   },
                   "description": {
                     "type": "string",
@@ -10349,13 +12037,13 @@
                       },
                       "name": {
                         "type": "string",
-                        "description": "The name of the organization",
-                        "nullable": true
+                        "minLength": 1,
+                        "description": "The name of the organization"
                       },
                       "slug": {
                         "type": "string",
-                        "description": "The slug of the organization",
-                        "nullable": true
+                        "minLength": 1,
+                        "description": "The slug of the organization"
                       },
                       "logo": {
                         "type": "string",
@@ -10363,16 +12051,15 @@
                         "nullable": true
                       },
                       "metadata": {
-                        "type": "string",
-                        "description": "The metadata of the organization",
-                        "nullable": true
+                        "type": "object",
+                        "additionalProperties": true,
+                        "description": "The metadata of the organization"
                       }
                     }
                   },
                   "organizationId": {
                     "type": "string",
-                    "description": "The organization ID. Eg: \"org-id\"",
-                    "nullable": true
+                    "description": "The organization ID. Eg: \"org-id\""
                   }
                 },
                 "required": [
@@ -10666,12 +12353,12 @@
                 "properties": {
                   "organizationId": {
                     "type": "string",
+                    "description": "The organization id to set as active. It can be null to unset the active organization. Eg: \"org-id\"",
                     "nullable": true
                   },
                   "organizationSlug": {
                     "type": "string",
-                    "description": "The organization slug to set as active. It can be null to unset the active organization if organizationId is not provided. Eg: \"org-slug\"",
-                    "nullable": true
+                    "description": "The organization slug to set as active. It can be null to unset the active organization if organizationId is not provided. Eg: \"org-slug\""
                   }
                 }
               }
@@ -11077,27 +12764,48 @@
                     "description": "The email address of the user to invite"
                   },
                   "role": {
-                    "type": "string",
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The role to assign to the user"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "description": "The roles to assign to the user"
+                        }
+                      }
+                    ],
                     "description": "The role(s) to assign to the user. It can be `admin`, `member`, owner. Eg: \"member\""
                   },
                   "organizationId": {
                     "type": "string",
-                    "description": "The organization ID to invite the user to",
-                    "nullable": true
+                    "description": "The organization ID to invite the user to"
                   },
                   "resend": {
                     "type": "boolean",
-                    "description": "Resend the invitation email, if the user is already invited. Eg: true",
-                    "nullable": true
+                    "description": "Resend the invitation email, if the user is already invited. Eg: true"
                   },
                   "teamId": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "description": "The team ID to invite the user to"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        },
+                        "description": "The team IDs to invite the user to"
+                      }
+                    ]
                   }
                 },
                 "required": [
                   "email",
-                  "role",
-                  "teamId"
+                  "role"
                 ]
               }
             }
@@ -12277,8 +13985,7 @@
                   },
                   "organizationId": {
                     "type": "string",
-                    "description": "The ID of the organization to remove the member from. If not provided, the active organization will be used. Eg: \"org-id\"",
-                    "nullable": true
+                    "description": "The ID of the organization to remove the member from. If not provided, the active organization will be used. Eg: \"org-id\""
                   }
                 },
                 "required": [
@@ -12449,7 +14156,17 @@
                 "type": "object",
                 "properties": {
                   "role": {
-                    "type": "string",
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    ],
                     "description": "The new role to be applied. This can be a string or array of strings representing the roles. Eg: [\"admin\", \"sale\"]"
                   },
                   "memberId": {
@@ -12458,8 +14175,7 @@
                   },
                   "organizationId": {
                     "type": "string",
-                    "description": "An optional organization ID which the member is a part of to apply the role update. If not provided, you must provide session headers to get the active organization. Eg: \"organization-id\"",
-                    "nullable": true
+                    "description": "An optional organization ID which the member is a part of to apply the role update. If not provided, you must provide session headers to get the active organization. Eg: \"organization-id\""
                   }
                 },
                 "required": [
@@ -13165,8 +14881,7 @@
                   },
                   "organizationId": {
                     "type": "string",
-                    "description": "The organization ID which the team will be created in. Defaults to the active organization. Eg: \"organization-id\"",
-                    "nullable": true
+                    "description": "The organization ID which the team will be created in. Defaults to the active organization. Eg: \"organization-id\""
                   }
                 },
                 "required": [
@@ -13503,8 +15218,7 @@
                   },
                   "organizationId": {
                     "type": "string",
-                    "description": "The organization ID which the team falls under. If not provided, it will default to the user's active organization. Eg: \"organization-id\"",
-                    "nullable": true
+                    "description": "The organization ID which the team falls under. If not provided, it will default to the user's active organization. Eg: \"organization-id\""
                   }
                 },
                 "required": [
@@ -13665,24 +15379,20 @@
                     "type": "object",
                     "properties": {
                       "id": {
-                        "type": "string",
-                        "nullable": true
+                        "type": "string"
                       },
                       "name": {
                         "type": "string",
-                        "nullable": true
+                        "minLength": 1
                       },
                       "organizationId": {
-                        "type": "string",
-                        "nullable": true
+                        "type": "string"
                       },
                       "createdAt": {
-                        "type": "string",
-                        "nullable": true
+                        "type": "string"
                       },
                       "updatedAt": {
-                        "type": "string",
-                        "nullable": true
+                        "type": "string"
                       }
                     }
                   }
@@ -13859,6 +15569,7 @@
                 "properties": {
                   "teamId": {
                     "type": "string",
+                    "description": "The team id to set as active. It can be null to unset the active team",
                     "nullable": true
                   }
                 }
@@ -14301,8 +16012,7 @@
                   },
                   "organizationId": {
                     "type": "string",
-                    "description": "The organization ID which the team falls under. If not provided, it will default to the user's active organization.",
-                    "nullable": true
+                    "description": "The organization ID which the team falls under. If not provided, it will default to the user's active organization."
                   }
                 },
                 "required": [
@@ -14480,8 +16190,7 @@
                   },
                   "organizationId": {
                     "type": "string",
-                    "description": "The organization ID which the team falls under. If not provided, it will default to the user's active organization.",
-                    "nullable": true
+                    "description": "The organization ID which the team falls under. If not provided, it will default to the user's active organization."
                   }
                 },
                 "required": [
@@ -14635,21 +16344,25 @@
                 "type": "object",
                 "properties": {
                   "organizationId": {
-                    "type": "string",
-                    "nullable": true
+                    "type": "string"
                   },
                   "role": {
                     "type": "string",
                     "description": "The name of the role to create"
                   },
                   "permission": {
-                    "type": "string",
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "description": "The permission to assign to the role"
                   },
                   "additionalFields": {
                     "type": "object",
-                    "properties": {},
-                    "nullable": true
+                    "properties": {}
                   }
                 },
                 "required": [
@@ -14773,6 +16486,55 @@
           }
         ],
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "organizationId": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "roleName": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "The name of the role to delete"
+                          }
+                        },
+                        "required": [
+                          "roleName"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "roleId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "The id of the role to delete"
+                          }
+                        },
+                        "required": [
+                          "roleId"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "400": {
             "content": {
@@ -15112,6 +16874,75 @@
           }
         ],
         "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "organizationId": {
+                        "type": "string"
+                      },
+                      "data": {
+                        "type": "object",
+                        "properties": {
+                          "permission": {
+                            "type": "object",
+                            "additionalProperties": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "roleName": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    },
+                    "required": [
+                      "data"
+                    ]
+                  },
+                  {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "roleName": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "The name of the role to update"
+                          }
+                        },
+                        "required": [
+                          "roleName"
+                        ]
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "roleId": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "The id of the role to update"
+                          }
+                        },
+                        "required": [
+                          "roleId"
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
         "responses": {
           "400": {
             "content": {

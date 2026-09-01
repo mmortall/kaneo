@@ -18,6 +18,8 @@ async function getTask(taskId: string) {
       status: taskTable.status,
       priority: taskTable.priority,
       workItemType: taskTable.workItemType,
+      taskCategory: taskTable.taskCategory,
+      strategyHorizons: taskTable.strategyHorizons,
       startDate: taskTable.startDate,
       dueDate: taskTable.dueDate,
       position: taskTable.position,

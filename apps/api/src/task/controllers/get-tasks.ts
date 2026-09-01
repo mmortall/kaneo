@@ -19,6 +19,7 @@ import {
   taskTable,
   userTable,
 } from "../../database/schema";
+import type { TaskCategory } from "../task-category";
 
 type GetTasksOptions = {
   assigneeId?: string;
@@ -28,6 +29,7 @@ type GetTasksOptions = {
   page?: number;
   priority?: string;
   workItemType?: "task" | "epic" | "sub_epic";
+  taskCategory?: TaskCategory;
   sortBy?:
     | "createdAt"
     | "priority"
@@ -96,6 +98,10 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     conditions.push(eq(taskTable.workItemType, options.workItemType));
   }
 
+  if (options.taskCategory) {
+    conditions.push(eq(taskTable.taskCategory, options.taskCategory));
+  }
+
   if (options.assigneeId) {
     conditions.push(eq(taskTable.userId, options.assigneeId));
   }
@@ -150,6 +156,8 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     status: taskTable.status,
     priority: taskTable.priority,
     workItemType: taskTable.workItemType,
+    taskCategory: taskTable.taskCategory,
+    strategyHorizons: taskTable.strategyHorizons,
     startDate: taskTable.startDate,
     dueDate: taskTable.dueDate,
     position: taskTable.position,

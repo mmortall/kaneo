@@ -156,4 +156,66 @@ describe("CreateTaskModal project picker", () => {
       );
     });
   });
+
+  it("sends selected task category when creating a task", async () => {
+    useLocation.mockReturnValue({
+      pathname: "/dashboard/workspace/workspace-1/project/project-1/board",
+    });
+
+    render(<CreateTaskModal open onClose={vi.fn()} />);
+
+    const categoryTrigger = screen.getByLabelText("tasks:categories.label");
+    fireEvent.keyDown(categoryTrigger, { key: "ArrowDown" });
+    const researchOption = await screen.findByText("tasks:categories.research");
+    fireEvent.pointerDown(researchOption, { pointerType: "mouse" });
+    fireEvent.click(researchOption);
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "common:modals.createTask.taskTitlePlaceholder",
+      ),
+      { target: { value: "Research task" } },
+    );
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+
+    await vi.waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: "project-1",
+          taskCategory: "research",
+        }),
+      );
+    });
+  });
+
+  it("sends selected strategy horizons when creating a task", async () => {
+    useLocation.mockReturnValue({
+      pathname: "/dashboard/workspace/workspace-1/project/project-1/board",
+    });
+
+    render(<CreateTaskModal open onClose={vi.fn()} />);
+
+    const horizonsTrigger = screen.getByLabelText("tasks:horizons.label");
+    fireEvent.keyDown(horizonsTrigger, { key: "ArrowDown" });
+    const positionOption = await screen.findByText(
+      "tasks:horizons.position.label",
+    );
+    fireEvent.pointerDown(positionOption, { pointerType: "mouse" });
+    fireEvent.click(positionOption);
+    fireEvent.change(
+      screen.getByPlaceholderText(
+        "common:modals.createTask.taskTitlePlaceholder",
+      ),
+      { target: { value: "Position strategy task" } },
+    );
+    fireEvent.submit(document.querySelector("form") as HTMLFormElement);
+
+    await vi.waitFor(() => {
+      expect(createTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: "project-1",
+          strategyHorizons: ["position"],
+        }),
+      );
+    });
+  });
 });

@@ -45,6 +45,8 @@ import updateTaskDueDate from "./controllers/update-task-due-date";
 import updateTaskPriority from "./controllers/update-task-priority";
 import updateTaskStatus from "./controllers/update-task-status";
 import updateTaskTitle from "./controllers/update-task-title";
+import { TASK_CATEGORIES } from "./task-category";
+import { TASK_HORIZONS } from "./task-horizon";
 import { TASK_UNBLOCK_POLICIES } from "./task-workflow-policy";
 import { VALID_PRIORITIES } from "./validate-task-fields";
 
@@ -93,6 +95,7 @@ const task = new Hono<{
           dueBefore: v.optional(v.string()),
           dueAfter: v.optional(v.string()),
           workItemType: v.optional(v.picklist(["task", "epic", "sub_epic"])),
+          taskCategory: v.optional(v.picklist(TASK_CATEGORIES)),
           agentReadyOnly: v.optional(
             v.pipe(
               v.string(),
@@ -211,6 +214,8 @@ const task = new Hono<{
         status: v.string(),
         userId: v.optional(v.string()),
         workItemType: v.optional(v.picklist(["task", "epic", "sub_epic"])),
+        taskCategory: v.optional(v.picklist(TASK_CATEGORIES)),
+        strategyHorizons: v.optional(v.array(v.picklist(TASK_HORIZONS))),
         goal: v.optional(v.string()),
         acceptanceCriteria: v.optional(v.string()),
         blockedReason: v.optional(v.string()),
@@ -232,6 +237,8 @@ const task = new Hono<{
         status,
         userId,
         workItemType,
+        taskCategory,
+        strategyHorizons,
         goal,
         acceptanceCriteria,
         blockedReason,
@@ -261,6 +268,8 @@ const task = new Hono<{
         priority,
         status,
         workItemType,
+        taskCategory,
+        strategyHorizons,
         goal,
         acceptanceCriteria,
         blockedReason,
@@ -379,6 +388,8 @@ const task = new Hono<{
         position: v.number(),
         userId: v.optional(v.string()),
         workItemType: v.optional(v.picklist(["task", "epic", "sub_epic"])),
+        taskCategory: v.optional(v.picklist(TASK_CATEGORIES)),
+        strategyHorizons: v.optional(v.array(v.picklist(TASK_HORIZONS))),
         goal: v.optional(v.string()),
         acceptanceCriteria: v.optional(v.string()),
         blockedReason: v.optional(v.string()),
@@ -404,6 +415,8 @@ const task = new Hono<{
         position,
         userId,
         workItemType,
+        taskCategory,
+        strategyHorizons,
         goal,
         acceptanceCriteria,
         blockedReason,
@@ -437,6 +450,8 @@ const task = new Hono<{
         position,
         userId,
         workItemType,
+        taskCategory,
+        strategyHorizons,
         currentUserId,
         {
           goal,
@@ -505,6 +520,8 @@ const task = new Hono<{
             startDate: v.optional(v.nullable(v.string())),
             dueDate: v.optional(v.nullable(v.string())),
             userId: v.optional(v.nullable(v.string())),
+            taskCategory: v.optional(v.picklist(TASK_CATEGORIES)),
+            strategyHorizons: v.optional(v.array(v.picklist(TASK_HORIZONS))),
             goal: v.optional(v.nullable(v.string())),
             acceptanceCriteria: v.optional(v.nullable(v.string())),
             blockedReason: v.optional(v.nullable(v.string())),

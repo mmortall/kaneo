@@ -194,18 +194,16 @@ function BacklogListView({
     const plannedTasks = project.plannedTasks || [];
     const blockedTasks = project.blockedTasks || [];
     const archivedTasks = project.archivedTasks || [];
-    const activeTask = [...plannedTasks, ...blockedTasks, ...archivedTasks].find(
-      (task) => task.id === activeTaskId,
-    );
+    const activeTask = [
+      ...plannedTasks,
+      ...blockedTasks,
+      ...archivedTasks,
+    ].find((task) => task.id === activeTaskId);
 
     if (!activeTask) return;
 
     let targetSection = overId;
-    if (
-      overId !== "planned" &&
-      overId !== "blocked" &&
-      overId !== "archived"
-    ) {
+    if (overId !== "planned" && overId !== "blocked" && overId !== "archived") {
       if (plannedTasks.some((task) => task.id === overId)) {
         targetSection = "planned";
       } else if (blockedTasks.some((task) => task.id === overId)) {

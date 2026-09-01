@@ -43,6 +43,14 @@ export const taskSchema = v.object({
     "urgent",
   ] as const),
   workItemType: v.picklist(["task", "epic", "sub_epic"] as const),
+  taskCategory: v.picklist([
+    "live_implementation",
+    "research",
+    "agent_blocker",
+  ] as const),
+  strategyHorizons: v.array(
+    v.picklist(["short", "position", "long_term", "ultra_long_term"] as const),
+  ),
   startDate: v.optional(v.date()),
   dueDate: v.optional(v.date()),
   createdAt: v.date(),

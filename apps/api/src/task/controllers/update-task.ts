@@ -8,12 +8,14 @@ import {
   assertWorkItemTypeChangeAllowed,
   type WorkItemType,
 } from "../../task-relation/work-item-hierarchy";
-import { assertValidTaskStatus } from "../validate-task-fields";
+import type { TaskCategory } from "../task-category";
+import { normalizeTaskHorizons, type TaskHorizon } from "../task-horizon";
 import {
   assertTaskWorkflowPolicy,
   isAiTaskCaller,
   resolveTaskWorkflowFields,
 } from "../task-workflow-policy";
+import { assertValidTaskStatus } from "../validate-task-fields";
 
 async function updateTask(
   id: string,
@@ -27,6 +29,8 @@ async function updateTask(
   position: number,
   userId?: string,
   workItemType?: WorkItemType,
+  taskCategory?: TaskCategory,
+  strategyHorizons?: TaskHorizon[],
   currentUserId?: string,
   workflowFields: {
     goal?: string;
@@ -45,6 +49,8 @@ async function updateTask(
       status: taskTable.status,
       projectId: taskTable.projectId,
       workItemType: taskTable.workItemType,
+      taskCategory: taskTable.taskCategory,
+      strategyHorizons: taskTable.strategyHorizons,
       goal: taskTable.goal,
       acceptanceCriteria: taskTable.acceptanceCriteria,
       blockedReason: taskTable.blockedReason,
@@ -95,7 +101,10 @@ async function updateTask(
     fields: {
       ...resolvedWorkflowFields,
       ...(existingTask.status !== "blocked" && status === "blocked"
-        ? { blockedReason: workflowFields.blockedReason, unblockPolicy: workflowFields.unblockPolicy }
+        ? {
+            blockedReason: workflowFields.blockedReason,
+            unblockPolicy: workflowFields.unblockPolicy,
+          }
         : {}),
     },
     unblockNote: workflowFields.unblockNote,
@@ -116,6 +125,11 @@ async function updateTask(
       position,
       userId: userId || null,
       workItemType: resolvedWorkItemType,
+      taskCategory: taskCategory ?? (existingTask.taskCategory as TaskCategory),
+      strategyHorizons:
+        strategyHorizons === undefined
+          ? existingTask.strategyHorizons
+          : normalizeTaskHorizons(strategyHorizons),
     })
     .where(eq(taskTable.id, id))
     .returning();

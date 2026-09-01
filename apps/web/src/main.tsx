@@ -42,6 +42,7 @@ console.log(`
 
 const router = createRouter({
   routeTree,
+  basepath: import.meta.env.BASE_URL,
   defaultPreload: "intent",
   defaultPreloadStaleTime: 0,
   context: {

@@ -40,7 +40,9 @@ import { getPriorityLabel, getStatusDisplayLabel } from "@/lib/i18n/domain";
 import { getPriorityIcon } from "@/lib/priority";
 import { toast } from "@/lib/toast";
 import TaskAssigneePopover from "./task-assignee-popover";
+import TaskCategorySelect from "./task-category-select";
 import TaskDueDatePopover from "./task-due-date-popover";
+import TaskHorizonsTaskSelect from "./task-horizons-select";
 import TaskLabelsPopover from "./task-labels-popover";
 import TaskMovePopover from "./task-move-popover";
 import TaskPriorityPopover from "./task-priority-popover";
@@ -226,6 +228,18 @@ export default function TaskPropertiesSidebar({
                     </span>
                   </Button>
                 </TaskPriorityPopover>
+              )}
+              {task && (
+                <TaskCategorySelect
+                  task={task}
+                  className="h-7 min-w-40 border-0 bg-transparent px-1.5 text-xs font-semibold shadow-none"
+                />
+              )}
+              {task && (
+                <TaskHorizonsTaskSelect
+                  task={task}
+                  className="h-7 min-w-36 max-w-64 border-0 bg-transparent px-1.5 text-xs font-semibold shadow-none"
+                />
               )}
               {task && (
                 <TaskAssigneePopover task={task} workspaceId={workspaceId}>
@@ -419,6 +433,18 @@ export default function TaskPropertiesSidebar({
                   </TaskPriorityPopover>
                 )}
                 {task && (
+                  <TaskCategorySelect
+                    task={task}
+                    className="h-7 min-w-40 border-0 bg-transparent px-1.5 text-xs font-semibold shadow-none"
+                  />
+                )}
+                {task && (
+                  <TaskHorizonsTaskSelect
+                    task={task}
+                    className="h-7 min-w-36 max-w-64 border-0 bg-transparent px-1.5 text-xs font-semibold shadow-none"
+                  />
+                )}
+                {task && (
                   <TaskAssigneePopover task={task} workspaceId={workspaceId}>
                     <Button
                       variant="ghost"
@@ -610,6 +636,18 @@ export default function TaskPropertiesSidebar({
                       </span>
                     </Button>
                   </TaskPriorityPopover>
+                )}
+                {task && (
+                  <TaskCategorySelect
+                    task={task}
+                    className="h-7 w-full border-0 bg-transparent px-1.5 text-xs font-semibold shadow-none"
+                  />
+                )}
+                {task && (
+                  <TaskHorizonsTaskSelect
+                    task={task}
+                    className="h-7 w-full border-0 bg-transparent px-1.5 text-xs font-semibold shadow-none"
+                  />
                 )}
                 {task && (
                   <TaskAssigneePopover task={task} workspaceId={workspaceId}>

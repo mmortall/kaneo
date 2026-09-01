@@ -11,7 +11,8 @@
 			"remove": "제거",
 			"reset": "재설정",
 			"filter": "필터",
-			"clearAllFilters": "모든 필터 지우기"
+			"clearAllFilters": "모든 필터 지우기",
+			"retry": "Retry"
 		},
 		"a11y": {
 			"toggleSidebar": "사이드바 토글"
@@ -1252,7 +1253,8 @@
 			"members": "멤버",
 			"invitations": "초대",
 			"more": "더 보기",
-			"backToBoard": "보드로 돌아가기"
+			"backToBoard": "보드로 돌아가기",
+			"myTasks": "My tasks"
 		},
 		"projectList": {
 			"viewProject": "프로젝트 보기",
@@ -1907,6 +1909,54 @@
 				"deleteRow": "행 삭제",
 				"deleteTable": "표 삭제"
 			}
+		},
+		"categories": {
+			"label": "Task category",
+			"liveImplementation": "Live implementation",
+			"research": "Research",
+			"agentBlocker": "Agent blocker",
+			"updateError": "Could not update task category."
+		},
+		"myTasks": {
+			"toDoCount": "To Do {{count}}",
+			"blockedColumn": "Blocked",
+			"emptyCategoryTitle": "No tasks in this category",
+			"emptyCategoryDescription": "Choose another category or classify an assigned task.",
+			"browseProjects": "Browse projects",
+			"emptyColumn": "No tasks in this status",
+			"emptyDescription": "Tasks assigned to you in workspace projects will appear here.",
+			"emptyTitle": "No tasks assigned to you",
+			"errorDescription": "Check your connection and try again.",
+			"errorTitle": "Could not load your tasks",
+			"statusUnavailable": "This status is not available in {{project}}.",
+			"statusUnavailableShort": "Unavailable",
+			"statusUpdateError": "Could not update task status.",
+			"summary": "{{count}} tasks across {{projectCount}} projects",
+			"title": "My tasks",
+			"emptyHorizonDescription": "Clear the horizon filter or assign this horizon to a task.",
+			"emptyHorizonTitle": "No tasks for this horizon"
+		},
+		"horizons": {
+			"filterLabel": "Horizon",
+			"label": "Strategy horizons",
+			"long_term": {
+				"description": "1 day to 1 week",
+				"label": "Long term"
+			},
+			"none": "No horizon",
+			"position": {
+				"description": "2h, 4h, 8h, up to 1 day",
+				"label": "Position"
+			},
+			"short": {
+				"description": "About 1 hour",
+				"label": "Short"
+			},
+			"ultra_long_term": {
+				"description": "Usually 1 year or more; no upper limit",
+				"label": "Ultra long term"
+			},
+			"updateError": "Could not update strategy horizons."
 		}
 	},
 	"invitations": {

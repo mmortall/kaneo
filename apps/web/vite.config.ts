@@ -6,11 +6,13 @@ import react, { reactCompilerPreset } from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import packageJson from "../../package.json";
 
+const basePath = process.env.VITE_BASE_PATH || "/";
+
 export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
   },
-  base: "/",
+  base: basePath,
   plugins: [
     tanstackRouter({
       autoCodeSplitting: true,

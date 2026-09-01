@@ -16,6 +16,8 @@ async function createTask(
   dueDate: Date | undefined,
   priority: CreateTaskRequest["priority"],
   workItemType: CreateTaskRequest["workItemType"] = "task",
+  taskCategory: CreateTaskRequest["taskCategory"] = "live_implementation",
+  strategyHorizons: CreateTaskRequest["strategyHorizons"] = [],
 ) {
   if (!projectId) {
     throw new Error("No project selected for task creation");
@@ -31,6 +33,8 @@ async function createTask(
       dueDate: dueDate?.toISOString() || undefined,
       priority,
       workItemType,
+      taskCategory,
+      strategyHorizons,
     },
     param: { projectId },
   });

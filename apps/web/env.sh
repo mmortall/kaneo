@@ -61,6 +61,11 @@ done
 # KANEO_TURNSTILE_SITE_KEY was left unset (issue #1304). Apply to any future
 # runtime-substituted flag so the same trap doesn't recur.
 echo "Stripping unset KANEO_* placeholders..."
+# Vite may minify a string literal into a template literal. An unset Turnstile
+# key must be empty or signup assumes captcha is enabled and disables submit.
+if [ -z "${KANEO_TURNSTILE_SITE_KEY:-}" ]; then
+  find /usr/share/nginx/html -type f \( -name "*.js" -o -name "*.css" \) -exec grep -l "KANEO_TURNSTILE_SITE_KEY" {} \; | xargs -r sed -i 's#KANEO_TURNSTILE_SITE_KEY##g'
+fi
 find /usr/share/nginx/html -type f \( -name "*.js" -o -name "*.css" \) \
   -exec grep -lE '"KANEO_[A-Z_]+"' {} \; \
   | xargs -r sed -i -E 's#"KANEO_[A-Z_]+"#""#g'

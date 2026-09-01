@@ -9,11 +9,11 @@ import {
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
-import { VIRTUAL_STATUSES } from "../validate-task-fields";
 import {
   assertTaskWorkflowPolicy,
   isAiTaskCaller,
 } from "../task-workflow-policy";
+import { VIRTUAL_STATUSES } from "../validate-task-fields";
 import { claimTaskNumber } from "./claim-task-numbers";
 
 type DbOrTx = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0];

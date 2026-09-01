@@ -387,6 +387,15 @@ export const taskTable = pgTable(
     }),
     priority: text("priority").default("low"),
     workItemType: text("work_item_type").notNull().default("task"),
+    taskCategory: text("task_category")
+      .$type<"live_implementation" | "research" | "agent_blocker">()
+      .notNull()
+      .default("live_implementation"),
+    strategyHorizons: text("strategy_horizons")
+      .array()
+      .$type<Array<"short" | "position" | "long_term" | "ultra_long_term">>()
+      .notNull()
+      .default(sql`ARRAY[]::text[]`),
     startDate: timestamp("start_date", { mode: "date" }),
     dueDate: timestamp("due_date", { mode: "date" }),
     createdAt: timestamp("created_at", { mode: "date" }).defaultNow().notNull(),
@@ -401,6 +410,7 @@ export const taskTable = pgTable(
     index("task_assigneeId_idx").on(table.userId),
     index("task_columnId_idx").on(table.columnId),
     index("task_workItemType_idx").on(table.workItemType),
+    index("task_taskCategory_idx").on(table.taskCategory),
     unique("task_project_number_unique").on(table.projectId, table.number),
   ],
 );

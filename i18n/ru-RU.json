@@ -3,6 +3,7 @@
 		"appName": "Kaneo",
 		"actions": {
 			"cancel": "Отмена",
+			"retry": "Повторить",
 			"close": "Закрыть",
 			"clearAll": "Очистить все",
 			"delete": "Удалить",
@@ -1258,6 +1259,7 @@
 		"notifications": "Уведомления",
 		"sidebar": {
 			"overview": "Обзор",
+			"myTasks": "Мои задачи",
 			"projects": "Проекты",
 			"members": "Участники",
 			"invitations": "Приглашения",
@@ -1857,6 +1859,54 @@
 		},
 		"kanban": {
 			"addTask": "Добавить задачу"
+		},
+		"categories": {
+			"label": "Категория задачи",
+			"liveImplementation": "Лайв-имплементация",
+			"research": "Исследование",
+			"agentBlocker": "Блокер агентов",
+			"updateError": "Не удалось изменить категорию задачи."
+		},
+		"horizons": {
+			"label": "Горизонты стратегии",
+			"filterLabel": "Горизонт",
+			"none": "Без горизонта",
+			"updateError": "Не удалось изменить горизонты стратегии.",
+			"short": {
+				"label": "Short",
+				"description": "Около 1 часа"
+			},
+			"position": {
+				"label": "Position",
+				"description": "2ч, 4ч, 8ч, до 1 дня"
+			},
+			"long_term": {
+				"label": "Long term",
+				"description": "От 1 дня до 1 недели"
+			},
+			"ultra_long_term": {
+				"label": "Ultra long term",
+				"description": "Обычно от 1 года, без верхней границы"
+			}
+		},
+		"myTasks": {
+			"toDoCount": "To Do {{count}}",
+			"blockedColumn": "Заблокировано",
+			"emptyCategoryTitle": "В этой категории нет задач",
+			"emptyCategoryDescription": "Выберите другую категорию или назначьте категорию своей задаче.",
+			"emptyHorizonTitle": "Нет задач для этого горизонта",
+			"emptyHorizonDescription": "Снимите фильтр горизонта или назначьте этот горизонт задаче.",
+			"title": "Мои задачи",
+			"summary": "Задач: {{count}} · Проектов: {{projectCount}}",
+			"emptyTitle": "На вас нет назначенных задач",
+			"emptyDescription": "Здесь появятся задачи, назначенные на вас в проектах этого воркспейса.",
+			"browseProjects": "Открыть проекты",
+			"emptyColumn": "В этом статусе нет задач",
+			"statusUnavailable": "Статус недоступен в проекте {{project}}.",
+			"statusUnavailableShort": "Недоступно",
+			"statusUpdateError": "Не удалось изменить статус задачи.",
+			"errorTitle": "Не удалось загрузить ваши задачи",
+			"errorDescription": "Проверьте соединение и повторите попытку."
 		},
 		"pr": {
 			"merged": "Влит",

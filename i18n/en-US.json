@@ -3,6 +3,7 @@
 		"appName": "Kaneo",
 		"actions": {
 			"cancel": "Cancel",
+			"retry": "Retry",
 			"close": "Close",
 			"clearAll": "Clear all",
 			"delete": "Delete",
@@ -1248,6 +1249,7 @@
 		"notifications": "Notifications",
 		"sidebar": {
 			"overview": "Overview",
+			"myTasks": "My tasks",
 			"projects": "Projects",
 			"members": "Members",
 			"invitations": "Invitations",
@@ -1827,6 +1829,54 @@
 		},
 		"kanban": {
 			"addTask": "Add task"
+		},
+		"categories": {
+			"label": "Task category",
+			"liveImplementation": "Live implementation",
+			"research": "Research",
+			"agentBlocker": "Agent blocker",
+			"updateError": "Could not update task category."
+		},
+		"horizons": {
+			"label": "Strategy horizons",
+			"filterLabel": "Horizon",
+			"none": "No horizon",
+			"updateError": "Could not update strategy horizons.",
+			"short": {
+				"label": "Short",
+				"description": "About 1 hour"
+			},
+			"position": {
+				"label": "Position",
+				"description": "2h, 4h, 8h, up to 1 day"
+			},
+			"long_term": {
+				"label": "Long term",
+				"description": "1 day to 1 week"
+			},
+			"ultra_long_term": {
+				"label": "Ultra long term",
+				"description": "Usually 1 year or more; no upper limit"
+			}
+		},
+		"myTasks": {
+			"toDoCount": "To Do {{count}}",
+			"blockedColumn": "Blocked",
+			"emptyCategoryTitle": "No tasks in this category",
+			"emptyCategoryDescription": "Choose another category or classify an assigned task.",
+			"emptyHorizonTitle": "No tasks for this horizon",
+			"emptyHorizonDescription": "Clear the horizon filter or assign this horizon to a task.",
+			"title": "My tasks",
+			"summary": "{{count}} tasks across {{projectCount}} projects",
+			"emptyTitle": "No tasks assigned to you",
+			"emptyDescription": "Tasks assigned to you in workspace projects will appear here.",
+			"browseProjects": "Browse projects",
+			"emptyColumn": "No tasks in this status",
+			"statusUnavailable": "This status is not available in {{project}}.",
+			"statusUnavailableShort": "Unavailable",
+			"statusUpdateError": "Could not update task status.",
+			"errorTitle": "Could not load your tasks",
+			"errorDescription": "Check your connection and try again."
 		},
 		"pr": {
 			"merged": "Merged",

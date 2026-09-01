@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import TaskDescriptionEditor from "@/components/task/task-description-editor";
+import { TaskHorizonsSelect } from "@/components/task/task-horizons-select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -37,6 +38,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import useCreateLabel from "@/hooks/mutations/label/use-create-label";
 import useCreateTask from "@/hooks/mutations/task/use-create-task";
 import { useDeleteTask } from "@/hooks/mutations/task/use-delete-task";
@@ -52,7 +60,9 @@ import { getInitials } from "@/lib/get-initials";
 import { getPriorityIcon } from "@/lib/priority";
 import { toast } from "@/lib/toast";
 import useProjectStore from "@/store/project";
+
 import type Task from "@/types/task";
+import type { TaskCategory, TaskHorizon } from "@/types/task";
 
 type CreateTaskModalProps = {
   open: boolean;
@@ -96,6 +106,8 @@ function normalizeTask(
     description: task.description ?? null,
     priority: task.priority ?? null,
     workItemType: task.workItemType ?? "task",
+    taskCategory: task.taskCategory ?? "live_implementation",
+    strategyHorizons: task.strategyHorizons ?? [],
     startDate: task.startDate ?? null,
     dueDate: task.dueDate ?? null,
     position: task.position ?? 0,
@@ -188,6 +200,29 @@ function CreateTaskModal({
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<Priority>("no-priority");
   const [workItemType, setWorkItemType] = useState<WorkItemType>("task");
+  const [taskCategory, setTaskCategory] = useState<TaskCategory>(
+    "live_implementation",
+  );
+  const [strategyHorizons, setStrategyHorizons] = useState<TaskHorizon[]>([]);
+  const taskCategoryItems = useMemo<
+    Array<{ label: string; value: TaskCategory }>
+  >(
+    () => [
+      {
+        label: t("tasks:categories.liveImplementation"),
+        value: "live_implementation" as const,
+      },
+      {
+        label: t("tasks:categories.research"),
+        value: "research" as const,
+      },
+      {
+        label: t("tasks:categories.agentBlocker"),
+        value: "agent_blocker" as const,
+      },
+    ],
+    [t],
+  );
   const [assigneeId, setAssigneeId] = useState("");
   const [startDate, setStartDate] = useState<Date | undefined>(undefined);
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
@@ -251,6 +286,8 @@ function CreateTaskModal({
     setDescription("");
     setPriority("no-priority");
     setWorkItemType("task");
+    setTaskCategory("live_implementation");
+    setStrategyHorizons([]);
     setAssigneeId("");
     setStartDate(undefined);
     setDueDate(undefined);
@@ -349,6 +386,8 @@ function CreateTaskModal({
       userId: assigneeId,
       priority,
       workItemType,
+      taskCategory,
+      strategyHorizons,
       projectId: resolvedProjectId,
       startDate: startDate ? startDate.toISOString() : undefined,
       dueDate: dueDate ? dueDate.toISOString() : undefined,
@@ -380,6 +419,8 @@ function CreateTaskModal({
     dueDate,
     priority,
     workItemType,
+    taskCategory,
+    strategyHorizons,
     resolvedProjectId,
     title,
     t,
@@ -403,6 +444,8 @@ function CreateTaskModal({
               status: taskStatus,
               priority,
               workItemType,
+              taskCategory,
+              strategyHorizons,
               startDate: startDate ? startDate.toISOString() : null,
               dueDate: dueDate ? dueDate.toISOString() : null,
               projectId: resolvedProjectId,
@@ -415,6 +458,8 @@ function CreateTaskModal({
               userId: assigneeId,
               priority,
               workItemType,
+              taskCategory,
+              strategyHorizons,
               projectId: resolvedProjectId,
               startDate: startDate ? startDate.toISOString() : undefined,
               dueDate: dueDate ? dueDate.toISOString() : undefined,
@@ -448,6 +493,8 @@ function CreateTaskModal({
         setDescription("");
         setPriority("no-priority");
         setWorkItemType("task");
+        setTaskCategory("live_implementation");
+        setStrategyHorizons([]);
         setAssigneeId("");
         setStartDate(undefined);
         setDueDate(undefined);
@@ -743,6 +790,39 @@ function CreateTaskModal({
                 <option value="epic">Epic</option>
                 <option value="sub_epic">Sub-epic</option>
               </select>
+
+              <Select
+                items={taskCategoryItems}
+                value={taskCategory}
+                onValueChange={(value) => value && setTaskCategory(value)}
+              >
+                <SelectTrigger
+                  size="sm"
+                  className="w-auto min-w-40 text-xs font-medium"
+                  aria-label={t("tasks:categories.label")}
+                >
+                  <SelectValue>
+                    {taskCategory === "live_implementation"
+                      ? t("tasks:categories.liveImplementation")
+                      : taskCategory === "research"
+                        ? t("tasks:categories.research")
+                        : t("tasks:categories.agentBlocker")}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup>
+                  {taskCategoryItems.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectPopup>
+              </Select>
+
+              <TaskHorizonsSelect
+                value={strategyHorizons}
+                onValueChange={setStrategyHorizons}
+                className="w-auto min-w-40 max-w-72 text-xs font-medium"
+              />
 
               <Popover>
                 <PopoverTrigger asChild>

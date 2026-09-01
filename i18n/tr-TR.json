@@ -11,7 +11,8 @@
 			"remove": "Kaldır",
 			"reset": "Sıfırla",
 			"filter": "Filtrele",
-			"clearAllFilters": "Tüm filtreleri temizle"
+			"clearAllFilters": "Tüm filtreleri temizle",
+			"retry": "Retry"
 		},
 		"a11y": {
 			"toggleSidebar": "Kenar çubuğunu aç/kapat"
@@ -1252,7 +1253,8 @@
 			"members": "Üyeler",
 			"invitations": "Davetler",
 			"more": "Daha fazla",
-			"backToBoard": "Panoya dön"
+			"backToBoard": "Panoya dön",
+			"myTasks": "My tasks"
 		},
 		"projectList": {
 			"viewProject": "Projeyi Görüntüle",
@@ -1907,6 +1909,54 @@
 				"deleteRow": "Satırı sil",
 				"deleteTable": "Tabloyu sil"
 			}
+		},
+		"categories": {
+			"label": "Task category",
+			"liveImplementation": "Live implementation",
+			"research": "Research",
+			"agentBlocker": "Agent blocker",
+			"updateError": "Could not update task category."
+		},
+		"myTasks": {
+			"toDoCount": "To Do {{count}}",
+			"blockedColumn": "Blocked",
+			"emptyCategoryTitle": "No tasks in this category",
+			"emptyCategoryDescription": "Choose another category or classify an assigned task.",
+			"browseProjects": "Browse projects",
+			"emptyColumn": "No tasks in this status",
+			"emptyDescription": "Tasks assigned to you in workspace projects will appear here.",
+			"emptyTitle": "No tasks assigned to you",
+			"errorDescription": "Check your connection and try again.",
+			"errorTitle": "Could not load your tasks",
+			"statusUnavailable": "This status is not available in {{project}}.",
+			"statusUnavailableShort": "Unavailable",
+			"statusUpdateError": "Could not update task status.",
+			"summary": "{{count}} tasks across {{projectCount}} projects",
+			"title": "My tasks",
+			"emptyHorizonDescription": "Clear the horizon filter or assign this horizon to a task.",
+			"emptyHorizonTitle": "No tasks for this horizon"
+		},
+		"horizons": {
+			"filterLabel": "Horizon",
+			"label": "Strategy horizons",
+			"long_term": {
+				"description": "1 day to 1 week",
+				"label": "Long term"
+			},
+			"none": "No horizon",
+			"position": {
+				"description": "2h, 4h, 8h, up to 1 day",
+				"label": "Position"
+			},
+			"short": {
+				"description": "About 1 hour",
+				"label": "Short"
+			},
+			"ultra_long_term": {
+				"description": "Usually 1 year or more; no upper limit",
+				"label": "Ultra long term"
+			},
+			"updateError": "Could not update strategy horizons."
 		}
 	},
 	"invitations": {

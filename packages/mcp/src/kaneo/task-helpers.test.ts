@@ -12,6 +12,7 @@ describe("buildFullTaskUpdateBody", () => {
       projectId: "p1",
       position: 1,
       userId: "u1",
+      strategyHorizons: ["short", "position"],
     };
     const patch = { status: "done" as const };
 
@@ -22,5 +23,6 @@ describe("buildFullTaskUpdateBody", () => {
     expect(body.status).toBe("done");
     expect(body.title).toBe("T");
     expect(body.position).toBe(1);
+    expect(body.strategyHorizons).toEqual(["short", "position"]);
   });
 });

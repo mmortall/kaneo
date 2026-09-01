@@ -2,6 +2,12 @@ const PRIORITIES = ["no-priority", "low", "medium", "high", "urgent"] as const;
 
 export type TaskPriority = (typeof PRIORITIES)[number];
 export type WorkItemType = "task" | "epic" | "sub_epic";
+export type TaskCategory = "live_implementation" | "research" | "agent_blocker";
+export type TaskHorizon =
+  | "short"
+  | "position"
+  | "long_term"
+  | "ultra_long_term";
 
 export function isTaskPriority(v: string): v is TaskPriority {
   return (PRIORITIES as readonly string[]).includes(v);
@@ -18,6 +24,8 @@ export type TaskUpdatePatch = {
   dueDate?: string | null;
   userId?: string | null;
   workItemType?: WorkItemType;
+  taskCategory?: TaskCategory;
+  strategyHorizons?: TaskHorizon[];
   goal?: string;
   acceptanceCriteria?: string;
   blockedReason?: string;
@@ -32,7 +40,7 @@ export type TaskUpdatePatch = {
 export function buildFullTaskUpdateBody(
   existing: Record<string, unknown>,
   patch: TaskUpdatePatch,
-): Record<string, string | number | undefined> {
+): Record<string, unknown> {
   const positionRaw = patch.position ?? existing.position;
   const position =
     typeof positionRaw === "number"
@@ -114,6 +122,14 @@ export function buildFullTaskUpdateBody(
     (typeof existing.acceptanceCriteria === "string"
       ? existing.acceptanceCriteria
       : undefined);
+  const taskCategory =
+    patch.taskCategory ??
+    (typeof existing.taskCategory === "string"
+      ? existing.taskCategory
+      : "live_implementation");
+  const strategyHorizons =
+    patch.strategyHorizons ??
+    (Array.isArray(existing.strategyHorizons) ? existing.strategyHorizons : []);
   const blockedReason =
     patch.blockedReason ??
     (typeof existing.blockedReason === "string"
@@ -130,7 +146,7 @@ export function buildFullTaskUpdateBody(
       ? existing.completionSummary
       : undefined);
 
-  const body: Record<string, string | number | undefined> = {
+  const body: Record<string, unknown> = {
     title,
     description,
     status,
@@ -142,6 +158,8 @@ export function buildFullTaskUpdateBody(
     blockedReason,
     unblockPolicy,
     completionSummary,
+    taskCategory,
+    strategyHorizons,
   };
 
   if (patch.unblockNote !== undefined) {

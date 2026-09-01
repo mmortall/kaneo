@@ -3,16 +3,17 @@ import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { columnTable, projectTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
-import {
-  coercePriority,
-  coerceStatus,
-  getValidTaskStatuses,
-} from "../validate-task-fields";
+import { normalizeTaskHorizons, type TaskHorizon } from "../task-horizon";
 import {
   assertTaskWorkflowPolicy,
   isAiTaskCaller,
   resolveTaskWorkflowFields,
 } from "../task-workflow-policy";
+import {
+  coercePriority,
+  coerceStatus,
+  getValidTaskStatuses,
+} from "../validate-task-fields";
 import { claimTaskNumber } from "./claim-task-numbers";
 
 export type ImportTask = {
@@ -27,6 +28,8 @@ export type ImportTask = {
   acceptanceCriteria?: string | null;
   blockedReason?: string | null;
   unblockPolicy?: string | null;
+  taskCategory?: "live_implementation" | "research" | "agent_blocker";
+  strategyHorizons?: TaskHorizon[];
   completionSummary?: string | null;
 };
 
@@ -97,6 +100,8 @@ async function importTasks(
             dueDate: taskData.dueDate ? new Date(taskData.dueDate) : null,
             description: taskData.description || "",
             ...workflowFields,
+            taskCategory: taskData.taskCategory ?? "live_implementation",
+            strategyHorizons: normalizeTaskHorizons(taskData.strategyHorizons),
             priority,
             number: taskNumber,
           })

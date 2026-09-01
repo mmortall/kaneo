@@ -13,6 +13,17 @@ const prioritySchema = z.enum([
   "urgent",
 ]);
 const workItemTypeSchema = z.enum(["task", "epic", "sub_epic"]);
+const taskCategorySchema = z.enum([
+  "live_implementation",
+  "research",
+  "agent_blocker",
+]);
+const taskHorizonSchema = z.enum([
+  "short",
+  "position",
+  "long_term",
+  "ultra_long_term",
+]);
 
 const nonEmptyString = z.string().trim().min(1);
 const optionalNonEmptyString = nonEmptyString.optional();
@@ -200,6 +211,7 @@ export function registerTools(
     dueBefore: optionalIsoDateTimeSchema,
     dueAfter: optionalIsoDateTimeSchema,
     workItemType: workItemTypeSchema.optional(),
+    taskCategory: taskCategorySchema.optional(),
     agentReadyOnly: z.boolean().optional(),
     unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
   });
@@ -244,7 +256,7 @@ export function registerTools(
     "create_task",
     {
       description:
-        "Create an AI-ready task. goal and acceptanceCriteria are required.",
+        "Create an AI-ready task. For work blocked on a person, use taskCategory=agent_blocker, status=blocked, describe blockedReason, set unblockPolicy=human_required, and assign userId.",
       inputSchema: z.object({
         projectId: nonEmptyString,
         title: nonEmptyString,
@@ -255,18 +267,24 @@ export function registerTools(
         dueDate: optionalIsoDateTimeSchema,
         userId: optionalNonEmptyString,
         workItemType: workItemTypeSchema.optional(),
+        taskCategory: taskCategorySchema.optional(),
+        strategyHorizons: z.array(taskHorizonSchema).optional(),
         goal: nonEmptyString,
         acceptanceCriteria: nonEmptyString,
+        blockedReason: optionalNonEmptyString,
+        unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
       }),
     },
     async (args) => {
-      const body: Record<string, string | undefined> = {
+      const body: Record<string, unknown> = {
         title: args.title,
         description: args.description,
         priority: args.priority,
         status: args.status,
         goal: args.goal,
         acceptanceCriteria: args.acceptanceCriteria,
+        blockedReason: args.blockedReason,
+        unblockPolicy: args.unblockPolicy,
       };
       if (args.startDate !== undefined) {
         body.startDate = args.startDate;
@@ -279,6 +297,12 @@ export function registerTools(
       }
       if (args.workItemType !== undefined) {
         body.workItemType = args.workItemType;
+      }
+      if (args.taskCategory !== undefined) {
+        body.taskCategory = args.taskCategory;
+      }
+      if (args.strategyHorizons !== undefined) {
+        body.strategyHorizons = args.strategyHorizons;
       }
       return run(() =>
         client.json(`/api/task/${encodeURIComponent(args.projectId)}`, {
@@ -301,6 +325,8 @@ export function registerTools(
     dueDate: nullableOptionalIsoDateTimeSchema,
     userId: nullableOptionalNonEmptyString,
     workItemType: workItemTypeSchema.optional(),
+    taskCategory: taskCategorySchema.optional(),
+    strategyHorizons: z.array(taskHorizonSchema).optional(),
     goal: optionalNonEmptyString,
     acceptanceCriteria: optionalNonEmptyString,
     blockedReason: optionalNonEmptyString,

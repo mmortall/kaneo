@@ -79,7 +79,7 @@ describe("registerTools", () => {
     });
   });
 
-  it("passes typed hierarchy fields through list, create, and update task tools", async () => {
+  it("passes hierarchy and task category fields through task tools", async () => {
     const { server, tools } = createServerMock();
     const client = {
       json: vi
@@ -94,6 +94,8 @@ describe("registerTools", () => {
           projectId: "project-1",
           position: 1,
           workItemType: "epic",
+          taskCategory: "live_implementation",
+          strategyHorizons: ["short"],
         })
         .mockResolvedValueOnce({ id: "epic-1" }),
     };
@@ -103,6 +105,7 @@ describe("registerTools", () => {
     await tools.get("list_tasks")?.handler({
       projectId: "project-1",
       workItemType: "epic",
+      taskCategory: "research",
     });
     await tools.get("create_task")?.handler({
       projectId: "project-1",
@@ -113,22 +116,30 @@ describe("registerTools", () => {
       goal: "Deliver epic outcome",
       acceptanceCriteria: "All epic criteria pass",
       workItemType: "epic",
+      taskCategory: "research",
+      strategyHorizons: ["position", "long_term"],
     });
     await tools.get("update_task")?.handler({
       taskId: "epic-1",
       workItemType: "sub_epic",
+      taskCategory: "agent_blocker",
+      strategyHorizons: ["ultra_long_term"],
     });
 
     expect(client.json).toHaveBeenNthCalledWith(
       1,
-      "/api/task/tasks/project-1?workItemType=epic",
+      "/api/task/tasks/project-1?workItemType=epic&taskCategory=research",
       { method: "GET" },
     );
     expect(JSON.parse(client.json.mock.calls[1]?.[1]?.body)).toMatchObject({
       workItemType: "epic",
+      taskCategory: "research",
+      strategyHorizons: ["position", "long_term"],
     });
     expect(JSON.parse(client.json.mock.calls[3]?.[1]?.body)).toMatchObject({
       workItemType: "sub_epic",
+      taskCategory: "agent_blocker",
+      strategyHorizons: ["ultra_long_term"],
     });
     expect(() =>
       tools.get("create_task")?.config.inputSchema?.parse({
@@ -138,6 +149,26 @@ describe("registerTools", () => {
         priority: "medium",
         status: "to-do",
         workItemType: "initiative",
+      }),
+    ).toThrow();
+    expect(() =>
+      tools.get("create_task")?.config.inputSchema?.parse({
+        projectId: "project-1",
+        title: "Wrong category",
+        description: "",
+        priority: "medium",
+        status: "to-do",
+        taskCategory: "support",
+      }),
+    ).toThrow();
+    expect(() =>
+      tools.get("create_task")?.config.inputSchema?.parse({
+        projectId: "project-1",
+        title: "Wrong horizon",
+        description: "",
+        priority: "medium",
+        status: "to-do",
+        strategyHorizons: ["intraday"],
       }),
     ).toThrow();
   });

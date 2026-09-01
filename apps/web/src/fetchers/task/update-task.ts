@@ -5,6 +5,9 @@ import type Task from "@/types/task";
 type UpdateTaskPriority = InferRequestType<
   (typeof client)["task"][":id"]["$put"]
 >["json"]["priority"];
+type UpdateTaskUnblockPolicy = InferRequestType<
+  (typeof client)["task"][":id"]["$put"]
+>["json"]["unblockPolicy"];
 
 async function updateTask(taskId: string, task: Task) {
   const workItemType =
@@ -24,10 +27,13 @@ async function updateTask(taskId: string, task: Task) {
       position: task.position ?? 0,
       projectId: task.projectId,
       workItemType,
+      taskCategory: task.taskCategory ?? "live_implementation",
+      strategyHorizons: task.strategyHorizons ?? [],
       goal: task.goal || undefined,
       acceptanceCriteria: task.acceptanceCriteria || undefined,
       blockedReason: task.blockedReason || undefined,
-      unblockPolicy: task.unblockPolicy || undefined,
+      unblockPolicy: (task.unblockPolicy ||
+        undefined) as UpdateTaskUnblockPolicy,
       completionSummary: task.completionSummary || undefined,
     },
   });

@@ -15,6 +15,23 @@ type TaskExternalLink = {
   metadata: Record<string, unknown> | null;
 };
 
+export const TASK_CATEGORIES = [
+  "live_implementation",
+  "research",
+  "agent_blocker",
+] as const;
+
+export type TaskCategory = (typeof TASK_CATEGORIES)[number];
+
+export const TASK_HORIZONS = [
+  "short",
+  "position",
+  "long_term",
+  "ultra_long_term",
+] as const;
+
+export type TaskHorizon = (typeof TASK_HORIZONS)[number];
+
 type Task = {
   id: string;
   title: string;
@@ -23,11 +40,13 @@ type Task = {
   goal?: string | null;
   acceptanceCriteria?: string | null;
   blockedReason?: string | null;
-  unblockPolicy?: "ai_allowed" | "human_required" | null;
+  unblockPolicy?: string | null;
   completionSummary?: string | null;
   status: string;
   priority: string | null;
   workItemType?: string;
+  taskCategory?: TaskCategory;
+  strategyHorizons?: TaskHorizon[];
   startDate: string | null;
   dueDate: string | null;
   position: number | null;

@@ -281,6 +281,173 @@ describe("API integration: task creation", () => {
     });
   });
 
+  it("persists, updates, and filters task categories for an assignee", async () => {
+    const member = await createWorkspaceMember();
+    const { project } = await createProjectFixture({
+      workspaceId: member.workspace.id,
+    });
+
+    mockAuthenticatedSession(member.user);
+    const { app } = createApp();
+    const headers = { "content-type": "application/json" };
+
+    const createResponse = await app.request(`/api/task/${project.id}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        title: "Investigate deployment behavior",
+        description: "Produce evidence before implementation",
+        priority: "medium",
+        status: "to-do",
+        userId: member.user.id,
+        taskCategory: "research",
+        strategyHorizons: ["position", "long_term", "position"],
+      }),
+    });
+
+    expect(createResponse.status).toBe(200);
+    const created = (await createResponse.json()) as {
+      id: string;
+      position: number;
+      taskCategory: string;
+      strategyHorizons: string[];
+    };
+    expect(created.taskCategory).toBe("research");
+    expect(created.strategyHorizons).toEqual(["position", "long_term"]);
+
+    const researchList = await app.request(
+      `/api/task/tasks/${project.id}?assigneeId=${member.user.id}&taskCategory=research`,
+    );
+    expect(researchList.status).toBe(200);
+    const researchPayload = (await researchList.json()) as {
+      data: { columns: Array<{ id: string; tasks: unknown[] }> };
+    };
+    expect(
+      researchPayload.data.columns.find((column) => column.id === "to-do")
+        ?.tasks,
+    ).toEqual([
+      expect.objectContaining({
+        id: created.id,
+        taskCategory: "research",
+        strategyHorizons: ["position", "long_term"],
+        userId: member.user.id,
+      }),
+    ]);
+
+    const updateResponse = await app.request(`/api/task/${created.id}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({
+        title: "Investigate deployment behavior",
+        description: "Waiting for human access",
+        priority: "medium",
+        status: "to-do",
+        projectId: project.id,
+        position: created.position,
+        userId: member.user.id,
+        taskCategory: "agent_blocker",
+        strategyHorizons: ["ultra_long_term"],
+      }),
+    });
+
+    expect(updateResponse.status).toBe(200);
+    await expect(updateResponse.json()).resolves.toMatchObject({
+      id: created.id,
+      taskCategory: "agent_blocker",
+      strategyHorizons: ["ultra_long_term"],
+    });
+
+    const blockerList = await app.request(
+      `/api/task/tasks/${project.id}?assigneeId=${member.user.id}&taskCategory=agent_blocker`,
+    );
+    expect(blockerList.status).toBe(200);
+    const blockerPayload = (await blockerList.json()) as {
+      data: { columns: Array<{ id: string; tasks: unknown[] }> };
+    };
+    expect(
+      blockerPayload.data.columns.find((column) => column.id === "to-do")
+        ?.tasks,
+    ).toEqual([expect.objectContaining({ id: created.id })]);
+
+    const exportResponse = await app.request(`/api/task/export/${project.id}`);
+    expect(exportResponse.status).toBe(200);
+    const exportPayload = (await exportResponse.json()) as {
+      tasks: Array<{
+        title: string;
+        taskCategory: string;
+        strategyHorizons: string[];
+      }>;
+    };
+    expect(exportPayload.tasks).toContainEqual(
+      expect.objectContaining({
+        title: "Investigate deployment behavior",
+        taskCategory: "agent_blocker",
+        strategyHorizons: ["ultra_long_term"],
+      }),
+    );
+
+    const importResponse = await app.request(`/api/task/import/${project.id}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        tasks: [
+          {
+            title: "Research imported dependency",
+            description: "Imported category must survive",
+            priority: "low",
+            status: "to-do",
+            taskCategory: "research",
+            strategyHorizons: ["short", "position"],
+          },
+        ],
+      }),
+    });
+    expect(importResponse.status).toBe(200);
+    await expect(importResponse.json()).resolves.toMatchObject({
+      results: {
+        successful: 1,
+        failed: 0,
+        tasks: [
+          {
+            success: true,
+            task: {
+              taskCategory: "research",
+              strategyHorizons: ["short", "position"],
+            },
+          },
+        ],
+      },
+    });
+
+    const invalidCategoryResponse = await app.request(
+      `/api/task/${project.id}`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          title: "Invalid category",
+          status: "to-do",
+          taskCategory: "support",
+        }),
+      },
+    );
+    expect(invalidCategoryResponse.status).toBe(400);
+
+    const invalidHorizonResponse = await app.request(
+      `/api/task/${project.id}`,
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          title: "Invalid horizon",
+          status: "to-do",
+          strategyHorizons: ["intraday"],
+        }),
+      },
+    );
+    expect(invalidHorizonResponse.status).toBe(400);
+  });
+
   it("preserves blocked status without assigning a project column", async () => {
     const member = await createWorkspaceMember();
     const { project } = await createProjectFixture({

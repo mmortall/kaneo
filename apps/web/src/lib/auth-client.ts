@@ -17,16 +17,27 @@ import { ac, admin, member, owner, viewer } from "./permissions";
 const getBaseURL = () => {
   const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:1337";
   try {
-    const url = new URL(apiUrl);
-    return `${url.protocol}//${url.host}`;
+    const url = new URL(apiUrl, window.location.origin);
+    return url.origin;
   } catch {
     return apiUrl.split("/").slice(0, 3).join("/");
   }
 };
 
+const getBasePath = () => {
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:1337";
+  try {
+    const url = new URL(apiUrl, window.location.origin);
+    const apiPath = url.pathname.replace(/\/$/, "") || "/api";
+    return `${apiPath}/auth`;
+  } catch {
+    return "/api/auth";
+  }
+};
+
 export const authClient = createAuthClient({
   baseURL: getBaseURL(),
-  basePath: "/api/auth",
+  basePath: getBasePath(),
   plugins: [
     anonymousClient(),
     lastLoginMethodClient(),

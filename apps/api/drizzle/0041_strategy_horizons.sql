@@ -1,0 +1,1 @@
+ALTER TABLE "task" ADD COLUMN "strategy_horizons" text[] DEFAULT ARRAY[]::text[] NOT NULL;

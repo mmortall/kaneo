@@ -126,6 +126,8 @@ If you're running Kubernetes, we provide a comprehensive Helm chart. Check out t
 
 ## Development
 
+Fork-specific product behavior is documented in the [LLM Wiki](docs/wiki/index.md).
+
 Want to hack on Kaneo? See our [Environment Setup Guide](ENVIRONMENT_SETUP.md) for detailed instructions on configuring environment variables and troubleshooting common issues like CORS problems.
 
 Quick start:

@@ -84,7 +84,7 @@ function formatOptionalIso(value: unknown): string | undefined {
 function buildFullTaskUpdateBody(
   existing: Record<string, unknown>,
   patch: Record<string, unknown>,
-): Record<string, string | number | undefined> {
+): Record<string, unknown> {
   const positionRaw = patch.position ?? existing.position;
   const position =
     typeof positionRaw === "number"
@@ -156,6 +156,14 @@ function buildFullTaskUpdateBody(
     (typeof existing.acceptanceCriteria === "string"
       ? existing.acceptanceCriteria
       : undefined);
+  const taskCategory =
+    (patch.taskCategory as string) ??
+    (typeof existing.taskCategory === "string"
+      ? existing.taskCategory
+      : "live_implementation");
+  const strategyHorizons =
+    (patch.strategyHorizons as string[] | undefined) ??
+    (Array.isArray(existing.strategyHorizons) ? existing.strategyHorizons : []);
   const blockedReason =
     (patch.blockedReason as string) ??
     (typeof existing.blockedReason === "string"
@@ -172,7 +180,7 @@ function buildFullTaskUpdateBody(
       ? existing.completionSummary
       : undefined);
 
-  const body: Record<string, string | number | undefined> = {
+  const body: Record<string, unknown> = {
     title,
     description,
     status,
@@ -184,6 +192,8 @@ function buildFullTaskUpdateBody(
     blockedReason,
     unblockPolicy,
     completionSummary,
+    taskCategory,
+    strategyHorizons,
   };
   if (patch.unblockNote !== undefined) {
     body.unblockNote = patch.unblockNote as string;
@@ -203,6 +213,17 @@ const prioritySchema = z.enum([
   "urgent",
 ]);
 const workItemTypeSchema = z.enum(WORK_ITEM_TYPES);
+const taskCategorySchema = z.enum([
+  "live_implementation",
+  "research",
+  "agent_blocker",
+]);
+const taskHorizonSchema = z.enum([
+  "short",
+  "position",
+  "long_term",
+  "ultra_long_term",
+]);
 const nonEmptyString = z.string().trim().min(1);
 const optionalNonEmptyString = nonEmptyString.optional();
 const nullableOptionalNonEmptyString = nonEmptyString.nullable().optional();
@@ -382,6 +403,7 @@ export function registerMcpTools(
         dueBefore: optionalIsoDateTimeSchema,
         dueAfter: optionalIsoDateTimeSchema,
         workItemType: workItemTypeSchema.optional(),
+        taskCategory: taskCategorySchema.optional(),
         agentReadyOnly: z.boolean().optional(),
         unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
       }),
@@ -420,7 +442,7 @@ export function registerMcpTools(
     "create_task",
     {
       description:
-        "Create an AI-ready task. goal and acceptanceCriteria are required.",
+        "Create an AI-ready task. For work blocked on a person, use taskCategory=agent_blocker, status=blocked, describe blockedReason, set unblockPolicy=human_required, and assign userId.",
       inputSchema: z.object({
         projectId: nonEmptyString,
         title: nonEmptyString,
@@ -431,24 +453,34 @@ export function registerMcpTools(
         dueDate: optionalIsoDateTimeSchema,
         userId: optionalNonEmptyString,
         workItemType: workItemTypeSchema.optional(),
+        taskCategory: taskCategorySchema.optional(),
+        strategyHorizons: z.array(taskHorizonSchema).optional(),
         goal: nonEmptyString,
         acceptanceCriteria: nonEmptyString,
+        blockedReason: optionalNonEmptyString,
+        unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
       }),
     },
     async (args) => {
-      const body: Record<string, string | undefined> = {
+      const body: Record<string, unknown> = {
         title: args.title,
         description: args.description,
         priority: args.priority,
         status: args.status,
         goal: args.goal,
         acceptanceCriteria: args.acceptanceCriteria,
+        blockedReason: args.blockedReason,
+        unblockPolicy: args.unblockPolicy,
       };
       if (args.startDate !== undefined) body.startDate = args.startDate;
       if (args.dueDate !== undefined) body.dueDate = args.dueDate;
       if (args.userId !== undefined) body.userId = args.userId;
       if (args.workItemType !== undefined)
         body.workItemType = args.workItemType;
+      if (args.taskCategory !== undefined)
+        body.taskCategory = args.taskCategory;
+      if (args.strategyHorizons !== undefined)
+        body.strategyHorizons = args.strategyHorizons;
       return run(() =>
         client.json(`/api/task/${encodeURIComponent(args.projectId)}`, {
           method: "POST",
@@ -475,6 +507,8 @@ export function registerMcpTools(
         dueDate: nullableOptionalIsoDateTimeSchema,
         userId: nullableOptionalNonEmptyString,
         workItemType: workItemTypeSchema.optional(),
+        taskCategory: taskCategorySchema.optional(),
+        strategyHorizons: z.array(taskHorizonSchema).optional(),
         goal: optionalNonEmptyString,
         acceptanceCriteria: optionalNonEmptyString,
         blockedReason: optionalNonEmptyString,

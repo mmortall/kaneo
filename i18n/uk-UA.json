@@ -3,6 +3,7 @@
 		"appName": "Kaneo",
 		"actions": {
 			"cancel": "Скасувати",
+			"retry": "Повторити",
 			"close": "Закрити",
 			"clearAll": "Очистити все",
 			"delete": "Видалити",
@@ -1250,6 +1251,7 @@
 		"notifications": "Сповіщення",
 		"sidebar": {
 			"overview": "Огляд",
+			"myTasks": "Мої завдання",
 			"projects": "Проєкти",
 			"members": "Учасники",
 			"invitations": "Запрошення",
@@ -1837,6 +1839,54 @@
 		},
 		"kanban": {
 			"addTask": "Додати завдання"
+		},
+		"categories": {
+			"label": "Категорія завдання",
+			"liveImplementation": "Лайв-імплементація",
+			"research": "Дослідження",
+			"agentBlocker": "Блокер агентів",
+			"updateError": "Не вдалося змінити категорію завдання."
+		},
+		"horizons": {
+			"label": "Горизонти стратегії",
+			"filterLabel": "Горизонт",
+			"none": "Без горизонту",
+			"updateError": "Не вдалося змінити горизонти стратегії.",
+			"short": {
+				"label": "Short",
+				"description": "Близько 1 години"
+			},
+			"position": {
+				"label": "Position",
+				"description": "2г, 4г, 8г, до 1 дня"
+			},
+			"long_term": {
+				"label": "Long term",
+				"description": "Від 1 дня до 1 тижня"
+			},
+			"ultra_long_term": {
+				"label": "Ultra long term",
+				"description": "Зазвичай від 1 року, без верхньої межі"
+			}
+		},
+		"myTasks": {
+			"toDoCount": "To Do {{count}}",
+			"blockedColumn": "Заблоковано",
+			"emptyCategoryTitle": "У цій категорії немає завдань",
+			"emptyCategoryDescription": "Виберіть іншу категорію або призначте категорію своєму завданню.",
+			"emptyHorizonTitle": "Немає завдань для цього горизонту",
+			"emptyHorizonDescription": "Зніміть фільтр горизонту або призначте цей горизонт завданню.",
+			"title": "Мої завдання",
+			"summary": "Завдань: {{count}} · Проєктів: {{projectCount}}",
+			"emptyTitle": "На вас не призначено завдань",
+			"emptyDescription": "Тут з’являться завдання, призначені на вас у проєктах цього робочого простору.",
+			"browseProjects": "Відкрити проєкти",
+			"emptyColumn": "У цьому статусі немає завдань",
+			"statusUnavailable": "Статус недоступний у проєкті {{project}}.",
+			"statusUnavailableShort": "Недоступно",
+			"statusUpdateError": "Не вдалося змінити статус завдання.",
+			"errorTitle": "Не вдалося завантажити ваші завдання",
+			"errorDescription": "Перевірте з’єднання та повторіть спробу."
 		},
 		"pr": {
 			"merged": "Змерджено",
