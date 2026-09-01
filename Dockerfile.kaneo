@@ -23,10 +23,10 @@ COPY i18n ./i18n
 COPY apps/api ./apps/api
 
 WORKDIR /app/packages/email
-RUN pnpm run build
+RUN rm -rf dist .cache && pnpm run build
 
 WORKDIR /app/packages/permissions
-RUN pnpm run build
+RUN rm -rf dist .cache && pnpm run build
 
 WORKDIR /app/apps/api
 RUN pnpm run build
@@ -79,7 +79,7 @@ COPY apps/web ./apps/web
 RUN pnpm install --frozen-lockfile
 
 WORKDIR /app/packages/permissions
-RUN pnpm run build
+RUN rm -rf dist .cache && pnpm run build
 
 WORKDIR /app/apps/web
 RUN pnpm run build
@@ -99,8 +99,8 @@ WORKDIR /app
 
 COPY --from=api-runtime --chown=appuser:appuser /app /app
 
-# Fail the build early if the runtime dependency layout is broken on the target architecture
-RUN cd /app/apps/api && node -e "const fs=require('fs');for(const m of ['bcryptjs','hono','pg','drizzle-orm','better-auth','ioredis','valibot','octokit','@modelcontextprotocol/sdk']){fs.accessSync('node_modules/'+m+'/package.json')}"
+# Fail the build early if runtime dependencies or compiled workspace packages are missing.
+RUN cd /app/apps/api && node -e "const fs=require('fs');for(const p of ['node_modules/bcryptjs/package.json','node_modules/hono/package.json','node_modules/pg/package.json','node_modules/drizzle-orm/package.json','node_modules/better-auth/package.json','node_modules/ioredis/package.json','node_modules/valibot/package.json','node_modules/octokit/package.json','node_modules/@modelcontextprotocol/sdk/package.json','node_modules/@kaneo/email/dist/index.js','node_modules/@kaneo/permissions/dist/index.js']){fs.accessSync(p)}"
 
 COPY --from=web-builder --chown=appuser:appuser /app/apps/web/dist /usr/share/nginx/html
 COPY --chown=appuser:appuser apps/web/nginx.kaneo.conf /etc/nginx/conf.d/default.conf
