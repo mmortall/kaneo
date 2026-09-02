@@ -3,11 +3,9 @@ import { CSS } from "@dnd-kit/utilities";
 import { CalendarDays } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useTranslation } from "react-i18next";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardHeader, CardPanel, CardTitle } from "@/components/ui/card";
 import { formatDateShort } from "@/lib/format";
-import { getInitials } from "@/lib/get-initials";
 import { getPriorityLabel } from "@/lib/i18n/domain";
 import { getPriorityIcon } from "@/lib/priority";
 import type { TaskHorizon } from "@/types/task";
@@ -87,18 +85,6 @@ export function MyTaskCardContent({ task }: { task: MyTask }) {
             {t(`tasks:horizons.${horizon as TaskHorizon}.label`)}
           </Badge>
         ))}
-
-        <span className="ml-auto">
-          <Avatar className="size-5">
-            <AvatarImage
-              src={task.assigneeImage ?? ""}
-              alt={task.assigneeName ?? t("common:people.unknown")}
-            />
-            <AvatarFallback className="text-[9px]">
-              {getInitials(task.assigneeName)}
-            </AvatarFallback>
-          </Avatar>
-        </span>
       </CardPanel>
     </Card>
   );
