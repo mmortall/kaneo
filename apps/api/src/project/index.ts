@@ -3,7 +3,10 @@ import { describeRoute, resolver, validator } from "hono-openapi";
 import * as v from "valibot";
 import { requireEntitlement } from "../billing/require-entitlement-middleware";
 import { projectSchema } from "../schemas";
-import { requireWorkspacePermission } from "../utils/require-workspace-permission";
+import {
+  hasWorkspacePermission,
+  requireWorkspacePermission,
+} from "../utils/require-workspace-permission";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
 import archiveProjectCtrl from "./controllers/archive-project";
 import createProjectCtrl from "./controllers/create-project";
@@ -158,6 +161,7 @@ const project = new Hono<{
         description,
         isPublic,
         workspaceId,
+        await hasWorkspacePermission(c, { project: ["share"] }),
       );
       return c.json(updatedProject);
     },

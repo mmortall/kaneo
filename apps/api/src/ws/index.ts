@@ -179,6 +179,25 @@ export function removeConnection(projectId: string, conn: ProjectConnection) {
   }
 }
 
+/**
+ * Closes every project socket a user holds on this instance. Used when a member is removed
+ * from a workspace: the handshake checks access once, so an open socket would keep receiving
+ * that workspace's events. A legitimate client reconnects and is re-authorized.
+ */
+export function revokeUserProjectConnections(userId: string) {
+  for (const [projectId, connections] of [...projectConnections]) {
+    for (const conn of [...connections]) {
+      if (conn.userId !== userId) continue;
+      removeConnection(projectId, conn);
+      try {
+        conn.ws.close(1008, "Workspace access revoked");
+      } catch {
+        /* Already closed. */
+      }
+    }
+  }
+}
+
 export function broadcastToProject(
   projectId: string,
   message: ProjectBroadcastMessage,

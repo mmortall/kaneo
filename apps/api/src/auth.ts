@@ -12,7 +12,6 @@ import {
 } from "@kaneo/permissions";
 import bcrypt from "bcryptjs";
 import { betterAuth } from "better-auth";
-import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import {
   APIError,
   createAuthMiddleware,
@@ -36,11 +35,14 @@ import { config } from "dotenv-mono";
 import { count, eq, sql } from "drizzle-orm";
 import { syncWorkspaceSeats } from "./billing/controllers/sync-seats";
 import db, { schema } from "./database";
+import { authDatabaseAdapter } from "./database/auth-adapter";
 import { publishEvent } from "./events";
+import { resolveAuthSecret } from "./utils/auth-secret";
 import { checkRegistrationAllowed } from "./utils/check-registration-allowed";
 import { checkWorkspaceName } from "./utils/check-workspace-name";
 import { mapCustomOAuthProfileToUser } from "./utils/custom-oauth-profile";
 import { generateDemoName } from "./utils/generate-demo-name";
+import { getDefaultCookieAttributes } from "./utils/get-default-cookie-attributes";
 import { getInvitationEmailSubject } from "./utils/get-invitation-email-subject";
 import { getWorkspaceInvitationEmailCopy } from "./utils/get-workspace-invitation-email-copy";
 import { getGithubSsoOAuthCredentials } from "./utils/github-sso-env";
@@ -48,6 +50,7 @@ import { isCloud } from "./utils/is-cloud";
 import { isDisposableEmail } from "./utils/is-disposable-email";
 import { isLocalSignInPath } from "./utils/is-local-sign-in-path";
 import { verifyTurnstile } from "./utils/verify-turnstile";
+import { revokeUserProjectConnections } from "./ws";
 
 config();
 
@@ -69,20 +72,6 @@ function normalizeInvitationId(value: unknown): string | undefined {
 
 const apiUrl = process.env.KANEO_API_URL || "http://localhost:1337";
 const clientUrl = process.env.KANEO_CLIENT_URL || "http://localhost:5173";
-const isHttps = apiUrl.startsWith("https://");
-const isCrossSubdomain = (() => {
-  try {
-    const apiHost = new URL(apiUrl).hostname;
-    const clientHost = new URL(clientUrl).hostname;
-    return (
-      apiHost !== clientHost &&
-      apiHost !== "localhost" &&
-      clientHost !== "localhost"
-    );
-  } catch {
-    return false;
-  }
-})();
 
 const trustedOrigins = [clientUrl];
 try {
@@ -102,12 +91,14 @@ const baseURLWithoutPath = (() => {
   }
 })();
 
-if (process.env.AUTH_SECRET && process.env.AUTH_SECRET.length < 32) {
-  console.error(
-    "AUTH_SECRET is less than 32 characters, please generate a new one.",
-  );
-  process.exit(1);
-}
+const authSecret = (() => {
+  try {
+    return resolveAuthSecret();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+})();
 
 async function getUserLocale(email: string) {
   const [user] = await db
@@ -162,6 +153,25 @@ function getDeviceAuthClientIds(): Set<string> {
   return new Set(["kaneo-cli", "kaneo-mcp"]);
 }
 
+const DEFAULT_TRUSTED_PROXIES = [
+  "127.0.0.0/8",
+  "::1/128",
+  "10.0.0.0/8",
+  "172.16.0.0/12",
+  "192.168.0.0/16",
+];
+
+function trustedProxies(): string[] {
+  const raw = process.env.TRUSTED_PROXIES?.trim();
+  if (!raw) {
+    return DEFAULT_TRUSTED_PROXIES;
+  }
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 function getDeviceAuthVerificationUri(): string {
   const base = clientUrl.replace(/\/$/, "");
   return `${base}/device`;
@@ -170,9 +180,9 @@ function getDeviceAuthVerificationUri(): string {
 export const auth = betterAuth({
   baseURL: baseURLWithoutPath,
   trustedOrigins,
-  secret: process.env.AUTH_SECRET || "",
+  secret: authSecret,
   basePath: "/api/auth",
-  database: drizzleAdapter(db, {
+  database: authDatabaseAdapter({
     provider: "pg",
     schema: {
       ...schema,
@@ -408,6 +418,7 @@ export const auth = betterAuth({
         },
         afterRemoveMember: async ({ member }) => {
           if (member?.organizationId) {
+            revokeUserProjectConnections(member.userId);
             void syncWorkspaceSeats(member.organizationId).catch((error) => {
               console.error("Seat sync after member remove failed:", error);
             });
@@ -507,6 +518,21 @@ export const auth = betterAuth({
   },
   databaseHooks: {
     user: {
+      update: {
+        before: async (user, ctx) => {
+          if (
+            (ctx?.path === "/admin/set-role" ||
+              ctx?.path === "/admin/update-user") &&
+            Object.hasOwn(user, "role") &&
+            ctx.body?.userId === ctx.context.session?.user.id
+          ) {
+            throw new APIError("BAD_REQUEST", {
+              code: "YOU_CANNOT_CHANGE_YOUR_OWN_ROLE",
+              message: "You cannot change your own role.",
+            });
+          }
+        },
+      },
       create: {
         before: async (user, ctx) => {
           // The anonymous() plugin creates ephemeral users for guest
@@ -730,13 +756,14 @@ export const auth = betterAuth({
     }),
   },
   advanced: {
-    defaultCookieAttributes: {
-      // For cross-subdomain auth with HTTPS, use sameSite: "none" with secure: true
-      // For same-domain or HTTP deployments, use sameSite: "lax" with secure: false
-      sameSite: isCrossSubdomain && isHttps ? "none" : "lax",
-      secure: isCrossSubdomain && isHttps, // must be true when sameSite is "none"
-      partitioned: isCrossSubdomain && isHttps,
-      domain: process.env.COOKIE_DOMAIN || undefined, // Optional: e.g., ".andrej.com" for explicit cross-subdomain cookies
+    ipAddress: {
+      ipAddressHeaders: ["cf-connecting-ip", "x-forwarded-for"],
+      trustedProxies: trustedProxies(),
     },
+    defaultCookieAttributes: getDefaultCookieAttributes({
+      apiUrl,
+      clientUrl,
+      cookieDomain: process.env.COOKIE_DOMAIN,
+    }),
   },
 });

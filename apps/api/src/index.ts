@@ -65,6 +65,7 @@ import timeEntry from "./time-entry";
 import { authenticateApiRequest } from "./utils/authenticate-api-request";
 import { authorizeAssetAccess } from "./utils/authorize-asset-access";
 import { getInvitationDetails } from "./utils/check-registration-allowed";
+import { getUserSession } from "./utils/get-user-session";
 import { migrateApiKeyReferenceId } from "./utils/migrate-apikey-reference-id";
 import { migrateNotificationPreferencesSchema } from "./utils/migrate-notification-preferences-schema";
 import { migrateSessionColumn } from "./utils/migrate-session-column";
@@ -313,7 +314,8 @@ export function createApp() {
       },
     }),
     async (c) => {
-      const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      // An x-api-key alone must not resolve to the key owner's session (and its token); see 23464e5c.
+      const session = await getUserSession(c.req.raw.headers);
       return c.json(session ?? null);
     },
   );
