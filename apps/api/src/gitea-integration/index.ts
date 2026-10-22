@@ -419,7 +419,8 @@ export async function handleGiteaWebhookRoute(c: Context) {
   );
 
   if (!result.success) {
-    return c.json({ error: result.error }, 400);
+    if ("response" in result) return result.response;
+    return c.json({ error: result.error }, result.status);
   }
 
   return c.json({ status: "success" });

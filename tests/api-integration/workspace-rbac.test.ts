@@ -121,9 +121,12 @@ describe("API integration: workspace RBAC enforcement", () => {
       mockAuthenticatedSession(member.user);
       const { app } = createApp();
 
-      const response = await app.request(`/api/task/${task.id}`, {
-        method: "DELETE",
-      });
+      const response = await app.request(
+        `/api/task/${task.id}?expectedVersion=${task.version}`,
+        {
+          method: "DELETE",
+        },
+      );
       expect(response.status).toBe(403);
 
       const stillThere = await db.query.taskTable.findFirst({
@@ -142,9 +145,12 @@ describe("API integration: workspace RBAC enforcement", () => {
       mockAuthenticatedSession(member.user);
       const { app } = createApp();
 
-      const response = await app.request(`/api/task/${task.id}`, {
-        method: "DELETE",
-      });
+      const response = await app.request(
+        `/api/task/${task.id}?expectedVersion=${task.version}`,
+        {
+          method: "DELETE",
+        },
+      );
       expect(response.status).toBe(200);
 
       const gone = await db.query.taskTable.findFirst({
@@ -163,9 +169,12 @@ describe("API integration: workspace RBAC enforcement", () => {
       mockAuthenticatedSession(member.user);
       const { app } = createApp();
 
-      const response = await app.request(`/api/task/${task.id}`, {
-        method: "DELETE",
-      });
+      const response = await app.request(
+        `/api/task/${task.id}?expectedVersion=${task.version}`,
+        {
+          method: "DELETE",
+        },
+      );
       expect(response.status).toBe(200);
     });
 
@@ -575,6 +584,7 @@ describe("API integration: workspace RBAC enforcement", () => {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          expectedVersion: task.version,
           title: "Updated by member",
           description: "edit",
           priority: "high",
@@ -600,6 +610,7 @@ describe("API integration: workspace RBAC enforcement", () => {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          expectedVersion: task.version,
           title: "Updated by member",
           description: "edit",
           priority: "high",
@@ -632,6 +643,7 @@ describe("API integration: workspace RBAC enforcement", () => {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          expectedVersion: task.version,
           title: "Member attempt",
           description: "nope",
           priority: "low",
@@ -663,6 +675,7 @@ describe("API integration: workspace RBAC enforcement", () => {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          expectedVersion: task.version,
           title: "Member attempt",
           description: "nope",
           priority: "low",
@@ -694,6 +707,7 @@ describe("API integration: workspace RBAC enforcement", () => {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          expectedVersion: task.version,
           title: "Assigned by admin",
           description: "",
           priority: "medium",
@@ -725,6 +739,7 @@ describe("API integration: workspace RBAC enforcement", () => {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          expectedVersion: task.version,
           title: "Viewer attempt",
           description: "nope",
           priority: "low",

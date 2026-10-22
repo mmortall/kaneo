@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskTable, userTable } from "../../database/schema";
 import { publishEvent } from "../../events";
-import { assertTaskMutationAllowed } from "../task-workflow-policy";
+import assertFieldMutationPolicy from "./assert-field-mutation-policy";
 
 async function updateTaskAssignee({
   id,
@@ -26,7 +26,7 @@ async function updateTaskAssignee({
     });
   }
 
-  assertTaskMutationAllowed({ caller, existing: existingTask });
+  await assertFieldMutationPolicy(existingTask, caller);
 
   const nextAssigneeId = userId || null;
   if (existingTask.userId === nextAssigneeId) {
@@ -36,12 +36,14 @@ async function updateTaskAssignee({
   const [updatedTask] = await db
     .update(taskTable)
     .set({ userId: nextAssigneeId || null })
-    .where(eq(taskTable.id, id))
+    .where(
+      and(eq(taskTable.id, id), eq(taskTable.version, existingTask.version)),
+    )
     .returning();
 
   if (!updatedTask) {
-    throw new HTTPException(500, {
-      message: "Failed to update task assignee",
+    throw new HTTPException(409, {
+      message: "Task changed during validation; reload before retrying",
     });
   }
 

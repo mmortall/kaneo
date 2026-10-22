@@ -74,12 +74,16 @@ const search = new Hono<{
         ),
         "20",
       ),
+      taskArchive: v.optional(
+        v.picklist(["active", "archived", "all"]),
+        "active",
+      ),
       userEmail: v.optional(v.pipe(v.string(), v.email())),
     }),
   ),
   workspaceAccess.fromQuery(),
   async (c) => {
-    const { q, type, workspaceId, projectId, limit, userEmail } =
+    const { q, type, workspaceId, projectId, limit, userEmail, taskArchive } =
       c.req.valid("query");
     const userId = c.get("userId");
 
@@ -91,6 +95,7 @@ const search = new Hono<{
       workspaceId,
       projectId,
       limit,
+      taskArchive,
     });
 
     return c.json(results);

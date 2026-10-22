@@ -20,7 +20,6 @@ import {
 } from "@dnd-kit/sortable";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { produce } from "immer";
 import {
   Archive,
   ChevronRight,
@@ -32,11 +31,11 @@ import {
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { priorityColorsTaskCard } from "@/constants/priority-colors";
-import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
+import { useOrderTask } from "@/hooks/mutations/task/use-order-task";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { cn } from "@/lib/cn";
+import { taskDragOrder } from "@/lib/task-drag-order";
 import useBacklogBulkSelectionStore from "@/store/backlog-bulk-selection";
-import useProjectStore from "@/store/project";
 import type { ProjectWithTasks } from "@/types/project";
 import type Task from "@/types/task";
 import BacklogBulkToolbar from "../bulk-selection/backlog-bulk-toolbar";
@@ -46,15 +45,20 @@ import BacklogTaskRow from "./backlog-task-row";
 type BacklogListViewProps = {
   project?: ProjectWithTasks;
   disableDragDrop?: boolean;
+  sections?: Array<"planned" | "blocked" | "archived">;
 };
+const DEFAULT_SECTIONS: NonNullable<BacklogListViewProps["sections"]> = [
+  "planned",
+  "blocked",
+  "archived",
+];
 
 function BacklogListView({
   project,
   disableDragDrop = false,
+  sections = DEFAULT_SECTIONS,
 }: BacklogListViewProps) {
   const { t } = useTranslation();
-  const { mutate: updateTask } = useUpdateTask();
-  const { setProject } = useProjectStore();
   const {
     setAvailableTasks,
     focusNext,
@@ -63,6 +67,7 @@ function BacklogListView({
     clearFocus,
   } = useBacklogBulkSelectionStore();
   const navigate = useNavigate();
+  const orderTask = useOrderTask();
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<
@@ -78,24 +83,24 @@ function BacklogListView({
   useEffect(() => {
     if (project) {
       const visibleTaskIds: string[] = [];
-      if (expandedSections.planned) {
+      if (sections.includes("planned") && expandedSections.planned) {
         visibleTaskIds.push(
           ...(project.plannedTasks || []).map((task) => task.id),
         );
       }
-      if (expandedSections.blocked) {
+      if (sections.includes("blocked") && expandedSections.blocked) {
         visibleTaskIds.push(
           ...(project.blockedTasks || []).map((task) => task.id),
         );
       }
-      if (expandedSections.archived) {
+      if (sections.includes("archived") && expandedSections.archived) {
         visibleTaskIds.push(
           ...(project.archivedTasks || []).map((task) => task.id),
         );
       }
       setAvailableTasks(visibleTaskIds);
     }
-  }, [project, expandedSections, setAvailableTasks]);
+  }, [project, expandedSections, setAvailableTasks, sections]);
 
   useEffect(() => {
     clearFocus();
@@ -182,117 +187,19 @@ function BacklogListView({
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
     setActiveId(null);
     setOverColumnId(null);
-
-    if (!over || !project) return;
-
-    const activeTaskId = active.id.toString();
-    const overId = over.id.toString();
-
-    const plannedTasks = project.plannedTasks || [];
-    const blockedTasks = project.blockedTasks || [];
-    const archivedTasks = project.archivedTasks || [];
-    const activeTask = [
-      ...plannedTasks,
-      ...blockedTasks,
-      ...archivedTasks,
-    ].find((task) => task.id === activeTaskId);
-
-    if (!activeTask) return;
-
-    let targetSection = overId;
-    if (overId !== "planned" && overId !== "blocked" && overId !== "archived") {
-      if (plannedTasks.some((task) => task.id === overId)) {
-        targetSection = "planned";
-      } else if (blockedTasks.some((task) => task.id === overId)) {
-        targetSection = "blocked";
-      } else if (archivedTasks.some((task) => task.id === overId)) {
-        targetSection = "archived";
-      } else {
-        return;
-      }
-    }
-
-    const updatedProject = produce(project, (draft) => {
-      const getSectionTasks = (sectionId: string) => {
-        if (sectionId === "planned") return draft.plannedTasks || [];
-        if (sectionId === "blocked") return draft.blockedTasks || [];
-        return draft.archivedTasks || [];
-      };
-      const setSectionTasks = (sectionId: string, tasks: Task[]) => {
-        if (sectionId === "planned") draft.plannedTasks = tasks;
-        else if (sectionId === "blocked") draft.blockedTasks = tasks;
-        else draft.archivedTasks = tasks;
-      };
-
-      const sourceSection = getSectionTasks(activeTask.status);
-
-      const sourceTaskIndex = sourceSection.findIndex(
-        (task) => task.id === activeTaskId,
-      );
-      const task = sourceSection[sourceTaskIndex];
-
-      if (!task) return;
-
-      setSectionTasks(
-        activeTask.status,
-        sourceSection.filter((t) => t.id !== activeTaskId),
-      );
-
-      if (activeTask.status === targetSection) {
-        const targetSectionTasks = getSectionTasks(activeTask.status);
-
-        let destinationIndex = targetSectionTasks.findIndex(
-          (t) => t.id === overId,
-        );
-
-        if (destinationIndex < 0) {
-          destinationIndex = targetSectionTasks.length;
-        }
-
-        if (sourceTaskIndex <= destinationIndex) {
-          destinationIndex += 1;
-        }
-
-        targetSectionTasks.splice(destinationIndex, 0, task);
-
-        const finalTasks = getSectionTasks(activeTask.status);
-
-        finalTasks.forEach((t, index) => {
-          updateTask({
-            ...t,
-            position: index,
-          });
-        });
-      } else {
-        task.status = targetSection;
-        const targetTasks = [...getSectionTasks(targetSection), task];
-        setSectionTasks(targetSection, targetTasks);
-
-        const updatedTasks = getSectionTasks(targetSection);
-
-        updatedTasks.forEach((t, index) => {
-          updateTask({
-            ...t,
-            status: targetSection,
-            position: index,
-          });
-        });
-
-        const sourceTasks = getSectionTasks(activeTask.status);
-
-        sourceTasks.forEach((t, index) => {
-          updateTask({
-            ...t,
-            position: index,
-          });
-        });
-      }
-    });
-
-    setProject(updatedProject);
+    if (!event.over || disableDragDrop || orderTask.isPending) return;
+    const intent = taskDragOrder(
+      [
+        { id: "planned", tasks: project?.plannedTasks ?? [] },
+        { id: "blocked", tasks: project?.blockedTasks ?? [] },
+        { id: "archived", tasks: project?.archivedTasks ?? [] },
+      ],
+      event.active.id.toString(),
+      event.over.id.toString(),
+    );
+    if (intent) orderTask.mutate(intent);
   };
 
   const toggleSection = (sectionId: string) => {
@@ -353,7 +260,7 @@ function BacklogListView({
                   })}
                 </span>
                 <span className="text-xs text-muted-foreground mt-0.5">
-                  {tasks.length}
+                  {project?.countsByStatus?.[sectionId] ?? tasks.length}
                 </span>
               </div>
             </div>
@@ -402,11 +309,13 @@ function BacklogListView({
 
             {tasks.length === 0 && (
               <div className="py-6 px-4 text-center text-xs text-muted-foreground">
-                {t("tasks:backlog.noTasksInSection", {
-                  section: t(`tasks:backlog.sections.${sectionId}`, {
-                    defaultValue: title,
-                  }).toLowerCase(),
-                })}
+                {(project?.countsByStatus?.[sectionId] ?? 0) > 0
+                  ? "No tasks on this page."
+                  : t("tasks:backlog.noTasksInSection", {
+                      section: t(`tasks:backlog.sections.${sectionId}`, {
+                        defaultValue: title,
+                      }).toLowerCase(),
+                    })}
               </div>
             )}
           </div>
@@ -439,27 +348,33 @@ function BacklogListView({
     >
       <div className="w-full h-full overflow-auto bg-muted/20">
         <div className="divide-y divide-border/50">
-          <BacklogSection
-            sectionId="planned"
-            title={t("tasks:backlog.sections.planned")}
-            icon={Clock}
-            tasks={plannedTasks}
-            showAddButton={true}
-          />
+          {sections.includes("planned") && (
+            <BacklogSection
+              sectionId="planned"
+              title={t("tasks:backlog.sections.planned")}
+              icon={Clock}
+              tasks={plannedTasks}
+              showAddButton={true}
+            />
+          )}
 
-          <BacklogSection
-            sectionId="blocked"
-            title="Blocked"
-            icon={CircleAlert}
-            tasks={blockedTasks}
-          />
+          {sections.includes("blocked") && (
+            <BacklogSection
+              sectionId="blocked"
+              title="Blocked"
+              icon={CircleAlert}
+              tasks={blockedTasks}
+            />
+          )}
 
-          <BacklogSection
-            sectionId="archived"
-            title={t("tasks:backlog.sections.archived")}
-            icon={Archive}
-            tasks={archivedTasks}
-          />
+          {sections.includes("archived") && (
+            <BacklogSection
+              sectionId="archived"
+              title={t("tasks:backlog.sections.archived")}
+              icon={Archive}
+              tasks={archivedTasks}
+            />
+          )}
         </div>
       </div>
 

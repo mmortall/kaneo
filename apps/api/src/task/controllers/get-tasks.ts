@@ -20,8 +20,13 @@ import {
   userTable,
 } from "../../database/schema";
 import type { TaskCategory } from "../task-category";
+import { getTaskSelection } from "../task-selection";
+import { type TaskViewFilter, taskViewConditions } from "../task-view-filter";
 
 type GetTasksOptions = {
+  view?: TaskViewFilter;
+  summary?: boolean;
+  includeTotal?: boolean;
   assigneeId?: string;
   dueAfter?: string;
   dueBefore?: string;
@@ -36,7 +41,8 @@ type GetTasksOptions = {
     | "dueDate"
     | "position"
     | "title"
-    | "number";
+    | "number"
+    | "scheduleStart";
   sortOrder?: "asc" | "desc";
   status?: string;
   agentReadyOnly?: boolean;
@@ -58,6 +64,10 @@ function buildOrderBy(
   const direction = sortOrder === "desc" ? desc : asc;
 
   switch (sortBy) {
+    case "scheduleStart":
+      return direction(
+        sql`LEAST(${taskTable.startDate}, ${taskTable.dueDate})`,
+      );
     case "createdAt":
       return direction(taskTable.createdAt);
     case "priority":
@@ -76,6 +86,9 @@ function buildOrderBy(
 async function getTasks(projectId: string, options: GetTasksOptions = {}) {
   const project = await db.query.projectTable.findFirst({
     where: eq(projectTable.id, projectId),
+    with: {
+      columns: { orderBy: [asc(columnTable.position)] },
+    },
   });
 
   if (!project) {
@@ -85,6 +98,8 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
   }
 
   const conditions = [eq(taskTable.projectId, projectId)];
+  if (options.view)
+    conditions.push(...taskViewConditions(options.view, project.slug));
 
   if (options.status) {
     conditions.push(eq(taskTable.status, options.status));
@@ -136,56 +151,76 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     options.sortOrder ?? "asc",
   );
 
-  const [taskCount] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(taskTable)
-    .where(whereClause);
+  const includeTotal = options.includeTotal ?? !options.summary;
+  let total: number | null = null;
+  let countsByStatus: Record<string, number> | undefined;
+  let scheduleBounds: { start: string | null; end: string | null } | undefined;
+  if (options.view) {
+    const counts = await db
+      .select({
+        status: taskTable.status,
+        count: sql<number>`count(*)`,
+        ...(options.view.scheduledOnly
+          ? {
+              start: sql<
+                string | null
+              >`to_char(min(LEAST(${taskTable.startDate}, ${taskTable.dueDate})), 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+              end: sql<
+                string | null
+              >`to_char(max(GREATEST(${taskTable.startDate}, ${taskTable.dueDate})), 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`,
+            }
+          : {}),
+      })
+      .from(taskTable)
+      .where(whereClause)
+      .groupBy(taskTable.status);
+    countsByStatus = Object.fromEntries(
+      counts.map((row) => [row.status, Number(row.count)]),
+    );
+    total = counts.reduce((sum, row) => sum + Number(row.count), 0);
+    if (options.view.scheduledOnly) {
+      const starts = counts
+        .flatMap((row) => (row.start ? [row.start] : []))
+        .sort();
+      const ends = counts.flatMap((row) => (row.end ? [row.end] : [])).sort();
+      scheduleBounds = { start: starts[0] ?? null, end: ends.at(-1) ?? null };
+    }
+  } else if (usePagination && includeTotal) {
+    const [taskCount] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(taskTable)
+      .where(whereClause);
+    total = Number(taskCount?.count ?? 0);
+  }
 
-  const total = Number(taskCount?.count ?? 0);
-
-  const taskSelection = {
-    id: taskTable.id,
-    title: taskTable.title,
-    number: taskTable.number,
-    description: taskTable.description,
-    goal: taskTable.goal,
-    acceptanceCriteria: taskTable.acceptanceCriteria,
-    blockedReason: taskTable.blockedReason,
-    unblockPolicy: taskTable.unblockPolicy,
-    completionSummary: taskTable.completionSummary,
-    status: taskTable.status,
-    priority: taskTable.priority,
-    workItemType: taskTable.workItemType,
-    taskCategory: taskTable.taskCategory,
-    strategyHorizons: taskTable.strategyHorizons,
-    startDate: taskTable.startDate,
-    dueDate: taskTable.dueDate,
-    position: taskTable.position,
-    createdAt: taskTable.createdAt,
-    userId: taskTable.userId,
-    assigneeName: userTable.name,
-    assigneeId: userTable.id,
-    assigneeImage: userTable.image,
-    projectId: taskTable.projectId,
-  };
+  const taskSelection = getTaskSelection(options.summary);
 
   const query = db
     .select(taskSelection)
     .from(taskTable)
     .leftJoin(userTable, eq(taskTable.userId, userTable.id))
-    .leftJoin(projectTable, eq(taskTable.projectId, projectTable.id))
     .where(whereClause)
-    .orderBy(orderByClause);
+    .orderBy(orderByClause, asc(taskTable.id));
 
-  const paginatedTasks = usePagination
-    ? await query.limit(pageSize).offset(offset)
+  const selectedTasks = usePagination
+    ? await query.limit(pageSize + (includeTotal ? 0 : 1)).offset(offset)
     : await query;
+  const hasMore =
+    usePagination &&
+    (total !== null
+      ? offset + pageSize < total
+      : selectedTasks.length > pageSize);
+  const paginatedTasks = usePagination
+    ? selectedTasks.slice(0, pageSize)
+    : selectedTasks;
+  if (!usePagination) total = selectedTasks.length;
 
   const taskIds = paginatedTasks.map((task) => task.id);
 
-  const labelsData =
+  // At most two independent enrichment queries; pool configuration stays unchanged.
+  const [labelsData, externalLinksData] = await Promise.all([
     taskIds.length > 0
-      ? await db
+      ? db
           .select({
             id: labelTable.id,
             name: labelTable.name,
@@ -194,15 +229,14 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
           })
           .from(labelTable)
           .where(inArray(labelTable.taskId, taskIds))
-      : [];
-
-  const externalLinksData =
+      : Promise.resolve([]),
     taskIds.length > 0
-      ? await db
+      ? db
           .select()
           .from(externalLinkTable)
           .where(inArray(externalLinkTable.taskId, taskIds))
-      : [];
+      : Promise.resolve([]),
+  ]);
 
   const taskLabelsMap = new Map<
     string,
@@ -246,13 +280,7 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
     });
   }
 
-  const projectColumns = await db
-    .select()
-    .from(columnTable)
-    .where(eq(columnTable.projectId, projectId))
-    .orderBy(asc(columnTable.position));
-
-  const columns = projectColumns.map((column) => ({
+  const columns = project.columns.map((column) => ({
     id: column.slug,
     slug: column.slug,
     name: column.name,
@@ -304,13 +332,18 @@ async function getTasks(projectId: string, options: GetTasksOptions = {}) {
       archivedTasks,
       plannedTasks,
       blockedTasks,
+      ...(countsByStatus ? { countsByStatus } : {}),
+      ...(scheduleBounds ? { scheduleBounds } : {}),
     },
     pagination: usePagination
       ? {
           total,
           page,
           pageSize,
-          totalPages: Math.max(1, Math.ceil(total / pageSize)),
+          totalPages:
+            total === null ? null : Math.max(1, Math.ceil(total / pageSize)),
+          hasMore,
+          nextPage: hasMore ? page + 1 : null,
         }
       : {
           total,

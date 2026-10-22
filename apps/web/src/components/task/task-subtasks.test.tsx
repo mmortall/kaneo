@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   createTask: vi.fn(),
   createRelation: vi.fn(),
   getColumns: vi.fn(),
+  relations: vi.fn(),
+  updateStatus: vi.fn(),
 }));
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => vi.fn() }));
@@ -31,13 +33,20 @@ vi.mock("@/hooks/mutations/task/use-delete-task", () => ({
   useDeleteTask: () => ({ mutateAsync: vi.fn() }),
 }));
 vi.mock("@/hooks/mutations/task/use-update-task-status", () => ({
-  useUpdateTaskStatus: () => ({ mutateAsync: vi.fn() }),
+  useUpdateTaskStatus: () => ({ mutateAsync: mocks.updateStatus }),
 }));
 vi.mock("@/hooks/queries/column/use-get-columns", () => ({
   useGetColumns: () => mocks.getColumns(),
 }));
 vi.mock("@/hooks/queries/task-relation/use-get-task-relations", () => ({
-  default: () => ({ data: [] }),
+  default: () => ({ data: mocks.relations() }),
+}));
+vi.mock("./subtask-row", () => ({
+  default: ({ onToggleComplete }: { onToggleComplete: () => void }) => (
+    <button type="button" onClick={onToggleComplete}>
+      Complete child
+    </button>
+  ),
 }));
 vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({
   default: () => ({ data: { id: "workspace-1" } }),
@@ -54,6 +63,8 @@ vi.mock("@/hooks/use-workspace-permission", () => ({
 vi.mock("@/lib/toast", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 beforeEach(() => {
+  mocks.relations.mockReturnValue([]);
+  mocks.updateStatus.mockResolvedValue({});
   mocks.getColumns.mockReturnValue({
     data: [
       { id: "todo", slug: "to-do", name: "To Do", isFinal: false },
@@ -69,6 +80,43 @@ afterEach(() => {
 });
 
 describe("TaskSubtasks", () => {
+  it("passes relation snapshot revision to completion mutation", async () => {
+    mocks.relations.mockReturnValue([
+      {
+        id: "relation",
+        relationType: "subtask",
+        sourceTaskId: "parent",
+        targetTaskId: "child",
+        targetTask: {
+          id: "child",
+          version: 9,
+          title: "Child",
+          number: 2,
+          status: "to-do",
+          priority: "low",
+          workItemType: "task",
+          userId: null,
+          assigneeName: null,
+          projectId: "project-1",
+        },
+      },
+    ]);
+    render(
+      <TaskSubtasks
+        taskId="parent"
+        projectId="project-1"
+        workspaceId="workspace-1"
+        parentStatus="to-do"
+        parentWorkItemType="sub_epic"
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Complete child" }));
+    await waitFor(() =>
+      expect(mocks.updateStatus).toHaveBeenCalledWith(
+        expect.objectContaining({ id: "child", version: 9, status: "done" }),
+      ),
+    );
+  });
   it("creates a subtask as planned when its parent is planned", async () => {
     mocks.createTask.mockResolvedValue({ id: "subtask-1" });
     mocks.createRelation.mockResolvedValue({});

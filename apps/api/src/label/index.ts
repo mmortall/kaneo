@@ -8,6 +8,7 @@ import assignLabelToTask from "./controllers/assign-label-to-task";
 import createLabel from "./controllers/create-label";
 import deleteLabel from "./controllers/delete-label";
 import getLabel from "./controllers/get-label";
+import getLabelCatalogue from "./controllers/get-label-catalogue";
 import getLabelsByTaskId from "./controllers/get-labels-by-task-id";
 import getLabelsByWorkspaceId from "./controllers/get-labels-by-workspace-id";
 import unassignLabelFromTask from "./controllers/unassign-label-from-task";
@@ -16,8 +17,44 @@ import updateLabel from "./controllers/update-label";
 const label = new Hono<{
   Variables: {
     userId: string;
+    workspaceId?: string;
   };
 }>()
+  .get(
+    "/workspace/:workspaceId/catalogue",
+    validator("param", v.object({ workspaceId: v.string() })),
+    validator(
+      "query",
+      v.object({
+        page: v.optional(
+          v.pipe(v.string(), v.regex(/^[1-9][0-9]{0,6}$/), v.transform(Number)),
+          "1",
+        ),
+        limit: v.optional(
+          v.pipe(
+            v.string(),
+            v.regex(/^[1-9][0-9]{0,2}$/),
+            v.transform(Number),
+            v.maxValue(100),
+          ),
+          "50",
+        ),
+        scope: v.optional(v.picklist(["groups", "definitions"]), "groups"),
+        search: v.optional(v.pipe(v.string(), v.maxLength(256)), ""),
+        exact: v.optional(v.picklist(["true", "false"]), "false"),
+      }),
+    ),
+    workspaceAccess.fromParam(),
+    async (c) => {
+      const query = c.req.valid("query");
+      return c.json(
+        await getLabelCatalogue(c.req.valid("param").workspaceId, {
+          ...query,
+          exact: query.exact === "true",
+        }),
+      );
+    },
+  )
   .get(
     "/task/:taskId",
     describeRoute({
@@ -143,7 +180,12 @@ const label = new Hono<{
       const { id } = c.req.valid("param");
       const { taskId } = c.req.valid("json");
       const userId = c.get("userId");
-      const label = await assignLabelToTask(id, taskId, userId);
+      const label = await assignLabelToTask(
+        id,
+        taskId,
+        userId,
+        c.get("workspaceId"),
+      );
       return c.json(label);
     },
   )
@@ -168,7 +210,11 @@ const label = new Hono<{
     async (c) => {
       const { id } = c.req.valid("param");
       const userId = c.get("userId");
-      const label = await unassignLabelFromTask(id, userId);
+      const label = await unassignLabelFromTask(
+        id,
+        userId,
+        c.get("workspaceId"),
+      );
       return c.json(label);
     },
   )
@@ -200,7 +246,7 @@ const label = new Hono<{
     async (c) => {
       const { id } = c.req.valid("param");
       const { name, color } = c.req.valid("json");
-      const label = await updateLabel(id, name, color);
+      const label = await updateLabel(id, name, color, c.get("workspaceId"));
       return c.json(label);
     },
   )
@@ -225,7 +271,7 @@ const label = new Hono<{
     async (c) => {
       const { id } = c.req.valid("param");
       const userId = c.get("userId");
-      const label = await deleteLabel(id, userId);
+      const label = await deleteLabel(id, userId, c.get("workspaceId"));
       return c.json(label);
     },
   );

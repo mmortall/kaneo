@@ -1,14 +1,14 @@
-import { and, eq, inArray, max, notInArray } from "drizzle-orm";
+import { and, eq, max } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
   activityTable,
   integrationTable,
-  labelTable,
   projectTable,
   taskTable,
 } from "../../database/schema";
 import { publishEvent } from "../../events";
+import importTaskLabels from "../../label/controllers/import-task-labels";
 import type { GiteaConfig } from "../../plugins/gitea/config";
 import { extractTaskNumberGitea } from "../../plugins/gitea/utils/branch-matcher";
 import {
@@ -327,61 +327,7 @@ async function importLabelsForTask(
         !label.name.startsWith("status:"),
     ) as Array<{ name: string; color: string }>;
 
-  const expectedNames = nonSystemLabels.map((label) => label.name);
-
-  if (expectedNames.length > 0) {
-    await db
-      .delete(labelTable)
-      .where(
-        and(
-          eq(labelTable.taskId, taskId),
-          notInArray(labelTable.name, expectedNames),
-        ),
-      );
-  } else {
-    await db.delete(labelTable).where(eq(labelTable.taskId, taskId));
-  }
-
-  const existingLabelsOnTask = await db.query.labelTable.findMany({
-    where:
-      expectedNames.length > 0
-        ? and(
-            eq(labelTable.taskId, taskId),
-            inArray(labelTable.name, expectedNames),
-          )
-        : eq(labelTable.taskId, taskId),
-  });
-
-  for (const labelData of nonSystemLabels) {
-    const existingLabelOnTask = existingLabelsOnTask.find(
-      (label) => label.name === labelData.name,
-    );
-
-    if (existingLabelOnTask) {
-      continue;
-    }
-
-    const existingWorkspaceLabel = await db.query.labelTable.findFirst({
-      where: and(
-        eq(labelTable.workspaceId, workspaceId),
-        eq(labelTable.name, labelData.name),
-      ),
-    });
-
-    const colorToUse = existingWorkspaceLabel?.color || labelData.color;
-
-    await db
-      .insert(labelTable)
-      .values({
-        name: labelData.name,
-        color: colorToUse,
-        taskId,
-        workspaceId,
-      })
-      .onConflictDoNothing({
-        target: [labelTable.taskId, labelTable.name],
-      });
-  }
+  await importTaskLabels(taskId, workspaceId, nonSystemLabels, "replace");
 }
 
 async function importCommentsForTask(

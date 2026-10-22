@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
-import { assertTaskMutationAllowed } from "../task-workflow-policy";
+import assertFieldMutationPolicy from "./assert-field-mutation-policy";
 
 async function updateTaskPriority({
   id,
@@ -26,17 +26,19 @@ async function updateTaskPriority({
     });
   }
 
-  assertTaskMutationAllowed({ caller, existing: existingTask });
+  await assertFieldMutationPolicy(existingTask, caller);
 
   const [updatedTask] = await db
     .update(taskTable)
     .set({ priority })
-    .where(eq(taskTable.id, id))
+    .where(
+      and(eq(taskTable.id, id), eq(taskTable.version, existingTask.version)),
+    )
     .returning();
 
   if (!updatedTask) {
-    throw new HTTPException(500, {
-      message: "Failed to update task priority",
+    throw new HTTPException(409, {
+      message: "Task changed during validation; reload before retrying",
     });
   }
 

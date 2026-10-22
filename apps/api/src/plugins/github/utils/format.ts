@@ -39,6 +39,14 @@ export function getLabelsForIssue(
 
 export function formatTaskDescriptionFromIssue(
   issueBody: string | null,
+  taskId?: string,
 ): string {
-  return issueBody || "";
+  const body = issueBody || "";
+  if (!taskId) return body;
+  const footer = `<sub>Task: ${taskId}</sub>`;
+  if (body === footer) return "";
+  if (!body.endsWith(footer)) return body;
+  const prefix = body.slice(0, -footer.length);
+  const separator = /(?:\r?\n){2}---\r?\n$/;
+  return separator.test(prefix) ? prefix.replace(separator, "") : body;
 }

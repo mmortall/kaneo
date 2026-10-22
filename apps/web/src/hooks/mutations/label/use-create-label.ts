@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { CreateLabelRequest } from "@/fetchers/label/create-label";
 import createLabel from "@/fetchers/label/create-label";
+import invalidateLabelTaskCaches from "./invalidate-label-task-caches";
 import { addLabelToTaskInTasksCache } from "./sync-task-labels-cache";
 
 function useCreateLabel() {
@@ -8,6 +9,8 @@ function useCreateLabel() {
 
   return useMutation({
     mutationFn: createLabel,
+    retry: false,
+    onSettled: () => invalidateLabelTaskCaches(queryClient),
     onSuccess: (createdLabel, variables: CreateLabelRequest) => {
       queryClient.setQueryData(
         ["labels", variables.workspaceId],
@@ -44,16 +47,6 @@ function useCreateLabel() {
           id: createdLabel.id,
           name: createdLabel.name,
           color: createdLabel.color,
-        });
-      }
-
-      void queryClient.invalidateQueries({
-        queryKey: ["labels", variables.workspaceId],
-      });
-
-      if (createdLabel.taskId) {
-        void queryClient.invalidateQueries({
-          queryKey: ["labels", createdLabel.taskId],
         });
       }
     },

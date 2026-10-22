@@ -8,6 +8,7 @@ import {
   userTable,
   workspaceTable,
 } from "../../database/schema";
+import { isStrictEventDelivery } from "../../events";
 import type {
   PluginContext,
   TaskAssigneeChangedEvent,
@@ -196,6 +197,7 @@ async function deliverWebhookEvent(
       projectId,
       webhookUrl: config.webhookUrl,
     });
+    if (isStrictEventDelivery()) throw error;
     return false;
   }
 }

@@ -9,9 +9,10 @@ function useGetProject({
   workspaceId: string;
 }) {
   return useQuery({
-    queryFn: () => getProject({ id, workspaceId }),
+    queryFn: ({ signal }) => getProject({ id, workspaceId }, signal),
     queryKey: ["projects", workspaceId, id],
     enabled: !!id,
+    retry: false,
   });
 }
 

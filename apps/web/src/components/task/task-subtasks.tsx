@@ -29,6 +29,7 @@ import useGetTaskRelations from "@/hooks/queries/task-relation/use-get-task-rela
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
+import { taskFromRelation } from "@/lib/task-from-relation";
 import { toast } from "@/lib/toast";
 import queryClient from "@/query-client";
 import type Task from "@/types/task";
@@ -54,7 +55,8 @@ export default function TaskSubtasks({
   const [isOpen, setIsOpen] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+  const [deleteSnapshot, setDeleteSnapshot] = useState<Task | null>(null);
+  const deleteTaskId = deleteSnapshot?.id ?? null;
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -119,22 +121,8 @@ export default function TaskSubtasks({
     setFocusedIndex(-1);
   }, []);
 
-  const buildTaskObject = (subtask: (typeof subtasks)[number]): Task => ({
-    id: subtask.task.id,
-    title: subtask.task.title,
-    number: subtask.task.number,
-    description: null,
-    status: subtask.task.status,
-    priority: subtask.task.priority,
-    startDate: null,
-    dueDate: null,
-    position: null,
-    createdAt: "",
-    userId: subtask.task.userId,
-    assigneeId: subtask.task.userId,
-    assigneeName: subtask.task.assigneeName,
-    projectId: subtask.task.projectId,
-  });
+  const buildTaskObject = (subtask: (typeof subtasks)[number]): Task =>
+    taskFromRelation(subtask.task);
 
   const getTargetTasks = (currentTask: Task): Task[] => {
     if (hasSelection && selectedIds.has(currentTask.id)) {
@@ -289,14 +277,14 @@ export default function TaskSubtasks({
   };
 
   const handleDeleteTask = async () => {
-    if (!deleteTaskId) return;
+    if (!deleteSnapshot) return;
     try {
-      await deleteTask(deleteTaskId);
+      await deleteTask(deleteSnapshot);
       queryClient.invalidateQueries({ queryKey: ["tasks", projectId] });
       queryClient.invalidateQueries({ queryKey: ["task-relations", taskId] });
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        next.delete(deleteTaskId);
+        next.delete(deleteSnapshot.id);
         return next;
       });
       toast.success(t("tasks:subtasks.deleteSuccess"));
@@ -307,7 +295,7 @@ export default function TaskSubtasks({
           : t("tasks:subtasks.deleteError"),
       );
     } finally {
-      setDeleteTaskId(null);
+      setDeleteSnapshot(null);
     }
   };
 
@@ -395,7 +383,9 @@ export default function TaskSubtasks({
                         },
                       })
                     }
-                    onDeleteClick={() => setDeleteTaskId(subtask.task.id)}
+                    onDeleteClick={() =>
+                      setDeleteSnapshot(buildTaskObject(subtask))
+                    }
                   />
                 );
               })}
@@ -452,7 +442,7 @@ export default function TaskSubtasks({
 
       <AlertDialog
         open={!!deleteTaskId}
-        onOpenChange={(open) => !open && setDeleteTaskId(null)}
+        onOpenChange={(open) => !open && setDeleteSnapshot(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -464,15 +454,14 @@ export default function TaskSubtasks({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose>
-              <Button variant="outline" size="sm">
-                {t("common:actions.cancel")}
-              </Button>
+            <AlertDialogClose render={<Button variant="outline" size="sm" />}>
+              {t("common:actions.cancel")}
             </AlertDialogClose>
-            <AlertDialogClose onClick={handleDeleteTask}>
-              <Button variant="destructive" size="sm">
-                {t("tasks:subtasks.deleteAction")}
-              </Button>
+            <AlertDialogClose
+              onClick={handleDeleteTask}
+              render={<Button variant="destructive" size="sm" />}
+            >
+              {t("tasks:subtasks.deleteAction")}
             </AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogContent>

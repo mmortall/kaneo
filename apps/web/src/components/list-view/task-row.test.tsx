@@ -1,8 +1,15 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type Task from "@/types/task";
 import TaskRow from "./task-row";
 
+const deleteTaskMock = vi.hoisted(() => vi.fn());
 const useExternalLinks = vi.fn((_taskId: string) => ({ data: [] }));
 const useGetLabelsByTask = vi.fn((_taskId: string) => ({ data: [] }));
 
@@ -24,7 +31,7 @@ vi.mock("@/hooks/queries/label/use-get-labels-by-task", () => ({
 }));
 
 vi.mock("@/hooks/mutations/task/use-delete-task", () => ({
-  useDeleteTask: () => ({ mutateAsync: vi.fn() }),
+  useDeleteTask: () => ({ mutateAsync: deleteTaskMock }),
 }));
 
 vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({
@@ -40,7 +47,13 @@ vi.mock(
 
 vi.mock(
   "../kanban-board/task-card-context-menu/task-card-context-menu-content",
-  () => ({ default: () => null }),
+  () => ({
+    default: ({ onDeleteClick }: { onDeleteClick: () => void }) => (
+      <button type="button" onClick={onDeleteClick}>
+        Open delete
+      </button>
+    ),
+  }),
 );
 
 vi.mock("@/store/bulk-selection", () => ({
@@ -108,4 +121,26 @@ describe("TaskRow", () => {
     expect(useExternalLinks).not.toHaveBeenCalled();
     expect(useGetLabelsByTask).not.toHaveBeenCalled();
   });
+});
+
+it("keeps confirmation revision when row refreshes before delete", async () => {
+  deleteTaskMock.mockResolvedValue({});
+  const reviewed = { ...task, version: 7 };
+  const view = render(<TaskRow task={reviewed} projectSlug="kan" />);
+  fireEvent.contextMenu(screen.getByText("Row from payload"));
+  fireEvent.click(await screen.findByRole("button", { name: "Open delete" }));
+  view.rerender(
+    <TaskRow
+      task={{ ...reviewed, version: 8, title: "New agent title" }}
+      projectSlug="kan"
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "tasks:delete.action" }));
+  await waitFor(() =>
+    expect(deleteTaskMock).toHaveBeenCalledWith({
+      id: task.id,
+      projectId: task.projectId,
+      version: 7,
+    }),
+  );
 });

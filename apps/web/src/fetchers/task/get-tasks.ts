@@ -7,7 +7,13 @@ type GetTasksFilters = {
 async function getTasks(projectId: string, filters: GetTasksFilters = {}) {
   const response = await client.task.tasks[":projectId"].$get({
     param: { projectId },
-    query: filters,
+    query: {
+      ...filters,
+      page: "1",
+      limit: "100",
+      sortBy: "number",
+      sortOrder: "asc",
+    },
   });
 
   if (!response.ok) {
@@ -17,7 +23,31 @@ async function getTasks(projectId: string, filters: GetTasksFilters = {}) {
 
   const json = await response.json();
 
-  return json.data;
+  const data = json.data;
+  // Board needs every column and virtual status; fetch bounded pages explicitly.
+  for (let page = 2; page <= json.pagination.totalPages; page++) {
+    const next = await client.task.tasks[":projectId"].$get({
+      param: { projectId },
+      query: {
+        ...filters,
+        page: String(page),
+        limit: "100",
+        sortBy: "number",
+        sortOrder: "asc",
+      },
+    });
+    if (!next.ok) throw new Error(await next.text());
+    const body = await next.json();
+    for (const column of data.columns) {
+      column.tasks.push(
+        ...(body.data.columns.find((c) => c.id === column.id)?.tasks ?? []),
+      );
+    }
+    data.archivedTasks.push(...body.data.archivedTasks);
+    data.plannedTasks.push(...body.data.plannedTasks);
+    data.blockedTasks.push(...body.data.blockedTasks);
+  }
+  return data;
 }
 
 export default getTasks;

@@ -2,6 +2,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Check, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LabelCataloguePager } from "@/components/common/label-catalogue-pager";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -10,8 +12,9 @@ import {
 } from "@/components/ui/popover";
 import useCreateLabel from "@/hooks/mutations/label/use-create-label";
 import useDeleteLabel from "@/hooks/mutations/label/use-delete-label";
+import useGetLabelCatalogue from "@/hooks/queries/label/use-get-label-catalogue";
 import useGetLabelsByTask from "@/hooks/queries/label/use-get-labels-by-task";
-import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
+import useLabelCatalogueSearch from "@/hooks/queries/label/use-label-catalogue-search";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
@@ -58,7 +61,8 @@ export default function TaskLabelsPopover({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<PopoverStep>("select");
-  const [searchValue, setSearchValue] = useState("");
+  const labelSearch = useLabelCatalogueSearch(workspaceId, open);
+  const { input: searchValue, setInput: setSearchValue } = labelSearch;
   const [selectedColor, setSelectedColor] = useState<LabelColor>("gray");
   const [newLabelName, setNewLabelName] = useState("");
 
@@ -76,7 +80,14 @@ export default function TaskLabelsPopover({
   const canCreateLabels = canManageLabels();
 
   const { data: taskLabels = [] } = useGetLabelsByTask(task.id);
-  const { data: workspaceLabels = [] } = useGetLabelsByWorkspace(workspaceId);
+  const workspaceLabels = labelSearch.catalogue.data?.items ?? [];
+  const exactName = useGetLabelCatalogue(
+    workspaceId,
+    { search: labelSearch.search, exact: true, limit: 1 },
+    open &&
+      Boolean(labelSearch.search) &&
+      searchValue.trim() === labelSearch.search,
+  );
 
   const taskLabelNames = useMemo(
     () => taskLabels.map((label) => label.name),
@@ -91,7 +102,7 @@ export default function TaskLabelsPopover({
     const labelMap = new Map<string, (typeof workspaceLabels)[0]>();
     for (const label of searchFiltered) {
       const existing = labelMap.get(label.name);
-      if (!existing || (label.taskId === null && existing.taskId !== null)) {
+      if (!existing || (label.isWorkspaceLabel && !existing.isWorkspaceLabel)) {
         labelMap.set(label.name, label);
       }
     }
@@ -101,11 +112,18 @@ export default function TaskLabelsPopover({
 
   const isCreatingNewLabel = useMemo(
     () =>
-      searchValue &&
-      !workspaceLabels.some(
-        (label) => label.name.toLowerCase() === searchValue.toLowerCase(),
-      ),
-    [workspaceLabels, searchValue],
+      Boolean(searchValue.trim()) &&
+      searchValue.trim() === labelSearch.search &&
+      !exactName.isPending &&
+      !exactName.error &&
+      exactName.data?.pagination.total === 0,
+    [
+      searchValue,
+      labelSearch.search,
+      exactName.isPending,
+      exactName.error,
+      exactName.data,
+    ],
   );
 
   useEffect(() => {
@@ -117,6 +135,7 @@ export default function TaskLabelsPopover({
   const resetPopover = () => {
     setStep("select");
     setSearchValue("");
+    labelSearch.setPage(1);
     setNewLabelName("");
     setSelectedColor("gray");
   };
@@ -166,6 +185,7 @@ export default function TaskLabelsPopover({
   };
 
   const handleCreateNewClick = () => {
+    if (!isCreatingNewLabel) return;
     setNewLabelName(searchValue);
     setStep("color");
   };
@@ -178,7 +198,7 @@ export default function TaskLabelsPopover({
 
     try {
       // First create the label in the workspace
-      await createLabel({
+      const definition = await createLabel({
         name: newLabelName.trim(),
         color: color,
         workspaceId,
@@ -186,8 +206,8 @@ export default function TaskLabelsPopover({
 
       // Then assign it to the task
       await createLabel({
-        name: newLabelName.trim(),
-        color: color,
+        name: definition.name,
+        color: definition.color,
         taskId: task.id,
         workspaceId,
       });
@@ -212,6 +232,10 @@ export default function TaskLabelsPopover({
       <div className="flex items-center gap-2 p-2 border-b border-border">
         <Search className="w-3 h-3 text-muted-foreground" />
         <Input
+          type="search"
+          aria-label={t("common:searchLabels", {
+            defaultValue: "Search labels",
+          })}
           ref={searchInputRef}
           value={searchValue}
           onChange={(e) => setSearchValue(e.target.value)}
@@ -221,15 +245,37 @@ export default function TaskLabelsPopover({
       </div>
 
       <div className="py-1">
-        {filteredLabels.length === 0 && searchValue.length === 0 && (
-          <span className="text-xs text-muted-foreground px-2">
-            {t("tasks:popover.labels.empty")}
-          </span>
+        {labelSearch.catalogue.error && (
+          <div role="alert" className="px-2 py-1 text-xs">
+            <p>{labelSearch.catalogue.error.message}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void labelSearch.catalogue.refetch()}
+            >
+              {t("common:retry", { defaultValue: "Retry" })}
+            </Button>
+          </div>
         )}
+        {labelSearch.busy && (
+          <p role="status" className="px-2 text-xs">
+            {t("common:loading", { defaultValue: "Loading…" })}
+          </p>
+        )}
+        {!labelSearch.busy &&
+          !labelSearch.catalogue.error &&
+          filteredLabels.length === 0 &&
+          searchValue.length === 0 && (
+            <span className="text-xs text-muted-foreground px-2">
+              {t("tasks:popover.labels.empty")}
+            </span>
+          )}
         {filteredLabels.map((label) => (
           <button
             key={label.id}
             type="button"
+            disabled={labelSearch.busy}
             className="w-full flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-accent/50 text-left"
             onClick={() => handleToggleLabel(label.id)}
           >
@@ -249,6 +295,24 @@ export default function TaskLabelsPopover({
             <span className="max-w-20 truncate">{label.name}</span>
           </button>
         ))}
+        <LabelCataloguePager
+          pagination={labelSearch.catalogue.data?.pagination}
+          busy={labelSearch.busy}
+          onPage={labelSearch.setPage}
+        />
+        {exactName.error && (
+          <div role="alert" className="px-2 text-xs">
+            <p>{exactName.error.message}</p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void exactName.refetch()}
+            >
+              {t("common:retry", { defaultValue: "Retry" })}
+            </Button>
+          </div>
+        )}
 
         {canCreateLabels && isCreatingNewLabel && filteredLabels.length > 0 && (
           <div className="border-t border-border my-1" />

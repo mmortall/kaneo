@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   addDays,
@@ -20,7 +21,7 @@ import PageTitle from "@/components/page-title";
 import TaskDetailsSheet from "@/components/task/task-details-sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useGetTasks } from "@/hooks/queries/task/use-get-tasks";
+import { useGetTaskView } from "@/hooks/queries/task/use-get-task-view";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/cn";
 import { getStatusLabel } from "@/lib/i18n/domain";
@@ -50,9 +51,47 @@ function RouteComponent() {
   const { projectId, workspaceId } = Route.useParams();
   const { taskId } = Route.useSearch();
   const navigate = useNavigate();
-  const { data: project } = useGetTasks(projectId);
+  const queryClient = useQueryClient();
+  const [pageState, setPageState] = useState({ scope: "", page: 1 });
+  const [searchText, setSearchText] = useState("");
   const weekStartsOn = useUserPreferencesStore((state) => state.weekStartsOn);
   const [searchQuery, setSearchQuery] = useState("");
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setSearchText(searchQuery.trim()),
+      250,
+    );
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+  const scope = JSON.stringify([projectId, searchText]);
+  const page = pageState.scope === scope ? pageState.page : 1;
+  const view = useGetTaskView(projectId, {
+    page,
+    limit: 50,
+    sortBy: "scheduleStart",
+    sortOrder: "asc",
+    filters: {
+      excludeStatuses: ["archived"],
+      scheduledOnly: true,
+      searchStatus: true,
+      text: searchText || undefined,
+    },
+  });
+  const project = view.data?.data;
+  const pagination = view.data?.pagination;
+  useEffect(() => {
+    if (
+      pagination &&
+      pagination.totalPages !== null &&
+      page > pagination.totalPages
+    ) {
+      void queryClient.invalidateQueries({
+        queryKey: ["tasks", projectId, "view"],
+        refetchType: "none",
+      });
+      setPageState({ scope, page: pagination.totalPages });
+    }
+  }, [pagination, page, scope, projectId, queryClient]);
   const isMobile = useIsMobile();
   const [isTaskRailOpen, setIsTaskRailOpen] = useState(false);
 
@@ -107,34 +146,12 @@ function RouteComponent() {
       );
   }, [allTasks]);
 
-  const scheduledTasks = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-    if (!normalizedQuery) return parsedTasks;
-
-    return parsedTasks.filter((task) => {
-      return (
-        task.title.toLowerCase().includes(normalizedQuery) ||
-        `${project?.slug ?? ""}-${task.number ?? ""}`
-          .toLowerCase()
-          .includes(normalizedQuery) ||
-        task.status.toLowerCase().includes(normalizedQuery)
-      );
-    });
-  }, [parsedTasks, project?.slug, searchQuery]);
-
+  const scheduledTasks = parsedTasks;
+  const scheduleBounds = project?.scheduleBounds;
   const timeline = useMemo(() => {
-    if (parsedTasks.length === 0) return null;
-
-    const earliest = parsedTasks.reduce(
-      (current, task) =>
-        task.scheduleStart < current ? task.scheduleStart : current,
-      parsedTasks[0].scheduleStart,
-    );
-    const latest = parsedTasks.reduce(
-      (current, task) =>
-        task.scheduleEnd > current ? task.scheduleEnd : current,
-      parsedTasks[0].scheduleEnd,
-    );
+    const earliest = parseTaskDate(scheduleBounds?.start ?? null);
+    const latest = parseTaskDate(scheduleBounds?.end ?? null);
+    if (!earliest || !latest) return null;
 
     // Week-aligned bounds around task dates, then pad with extra days so bars can
     // be resized or moved past the current last task without running out of grid.
@@ -151,7 +168,12 @@ function RouteComponent() {
       gridTemplateColumns: `repeat(${days.length}, minmax(${dayColumnWidthRem}rem, ${dayColumnWidthRem}rem))`,
       timelineMinWidthRem: days.length * dayColumnWidthRem,
     };
-  }, [parsedTasks, dayColumnWidthRem, weekStartsOn]);
+  }, [
+    scheduleBounds?.start,
+    scheduleBounds?.end,
+    dayColumnWidthRem,
+    weekStartsOn,
+  ]);
 
   useLayoutEffect(() => {
     const element = timelineTrackRef.current;
@@ -216,7 +238,45 @@ function RouteComponent() {
           </div>
         </div>
 
-        {!timeline || parsedTasks.length === 0 ? (
+        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-sm">
+          <span>
+            {pagination
+              ? `Page ${page} of ${pagination.totalPages} - ${pagination.total} scheduled tasks`
+              : "Loading..."}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1 || view.isFetching}
+            onClick={() => setPageState({ scope, page: page - 1 })}
+          >
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!pagination?.hasMore || view.isFetching}
+            onClick={() => setPageState({ scope, page: page + 1 })}
+          >
+            Next
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={view.isFetching}
+            onClick={() => void view.refetch()}
+          >
+            Refresh
+          </Button>
+        </div>
+        {view.isError && (
+          <p role="alert" className="px-4 py-2 text-destructive">
+            {view.error.message}
+          </p>
+        )}
+        {view.isPending ? (
+          <p className="px-4 py-3">Loading...</p>
+        ) : !timeline || parsedTasks.length === 0 ? (
           <div className="flex flex-1 items-center justify-center px-6">
             <div className="max-w-sm text-center">
               <h2 className="text-sm font-semibold text-foreground">

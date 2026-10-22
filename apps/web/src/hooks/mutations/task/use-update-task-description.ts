@@ -1,13 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import updateTaskDescription from "@/fetchers/task/update-task-description";
 import type Task from "@/types/task";
+import { useTaskMutationError } from "./use-task-mutation-error";
 
 export function useUpdateTaskDescription() {
   const queryClient = useQueryClient();
+  const onError = useTaskMutationError();
 
   return useMutation({
+    onError,
     mutationFn: (task: Task) => updateTaskDescription(task.id, task),
     onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", "my"] });
       queryClient.invalidateQueries({
         queryKey: ["task", variables.id],
       });

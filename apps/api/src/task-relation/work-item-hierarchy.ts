@@ -26,6 +26,9 @@ function invalidHierarchy(message: string): never {
 export async function assertSubtaskRelationAllowed(
   sourceTask: WorkItem,
   targetTask: WorkItem,
+  database:
+    | typeof db
+    | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
 ) {
   if (sourceTask.projectId !== targetTask.projectId) {
     invalidHierarchy("Hierarchy items must belong to the same project");
@@ -37,7 +40,7 @@ export async function assertSubtaskRelationAllowed(
     );
   }
 
-  const [existingParent] = await db
+  const [existingParent] = await database
     .select({ id: taskRelationTable.id })
     .from(taskRelationTable)
     .where(
@@ -53,11 +56,18 @@ export async function assertSubtaskRelationAllowed(
   }
 
   let ancestorId = sourceTask.id;
+  const visited = new Set<string>();
   while (ancestorId) {
+    if (visited.has(ancestorId) || visited.size >= 32) {
+      invalidHierarchy(
+        "Existing hierarchy is cyclic or exceeds supported depth",
+      );
+    }
+    visited.add(ancestorId);
     if (ancestorId === targetTask.id) {
       invalidHierarchy("A hierarchy relation cannot create a cycle");
     }
-    const [parent] = await db
+    const [parent] = await database
       .select({ sourceTaskId: taskRelationTable.sourceTaskId })
       .from(taskRelationTable)
       .where(
@@ -74,8 +84,11 @@ export async function assertSubtaskRelationAllowed(
 export async function assertWorkItemTypeChangeAllowed(
   taskId: string,
   nextType: WorkItemType,
+  database:
+    | typeof db
+    | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
 ) {
-  const relations = await db
+  const relations = await database
     .select({
       sourceTaskId: taskRelationTable.sourceTaskId,
       targetTaskId: taskRelationTable.targetTaskId,
@@ -88,7 +101,7 @@ export async function assertWorkItemTypeChangeAllowed(
       ),
     );
 
-  const parents = await db
+  const parents = await database
     .select({ sourceTaskId: taskRelationTable.sourceTaskId })
     .from(taskRelationTable)
     .where(
@@ -103,7 +116,7 @@ export async function assertWorkItemTypeChangeAllowed(
     ...parents.map((relation) => relation.sourceTaskId),
   ];
   const relatedTasks = relatedIds.length
-    ? await db
+    ? await database
         .select({ id: taskTable.id, workItemType: taskTable.workItemType })
         .from(taskTable)
         .where(inArray(taskTable.id, relatedIds))

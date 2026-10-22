@@ -105,6 +105,7 @@ async function moveTask({
   currentUserId,
   caller,
   unblockNote,
+  expectedVersion,
 }: {
   taskId: string;
   destinationProjectId: string;
@@ -112,6 +113,7 @@ async function moveTask({
   currentUserId: string;
   caller?: string;
   unblockNote?: string;
+  expectedVersion?: number;
 }) {
   const existingTask = await db.query.taskTable.findFirst({
     where: eq(taskTable.id, taskId),
@@ -120,6 +122,18 @@ async function moveTask({
   if (!existingTask) {
     throw new HTTPException(404, {
       message: "Task not found",
+    });
+  }
+
+  if (
+    expectedVersion !== undefined &&
+    expectedVersion !== existingTask.version
+  ) {
+    throw new HTTPException(409, {
+      res: Response.json(
+        { error: "TASK_CONFLICT", currentVersion: existingTask.version },
+        { status: 409 },
+      ),
     });
   }
 
@@ -180,7 +194,8 @@ async function moveTask({
     isAiCaller: isAiTaskCaller(caller),
     existing: existingTask,
     nextStatus: resolvedColumn.slug,
-    isFinalStatus: resolvedColumn.isFinal === true,
+    isFinalStatus:
+      resolvedColumn.slug === "done" || resolvedColumn.isFinal === true,
     fields: existingTask,
     unblockNote,
   });
@@ -205,12 +220,17 @@ async function moveTask({
         number: nextTaskNumber,
         position: nextPosition,
       })
-      .where(eq(taskTable.id, taskId))
+      .where(
+        and(
+          eq(taskTable.id, taskId),
+          eq(taskTable.version, existingTask.version),
+        ),
+      )
       .returning();
 
     if (!updatedTask) {
-      throw new HTTPException(500, {
-        message: "Failed to move task",
+      throw new HTTPException(409, {
+        message: "Task changed during move validation; reload before retrying",
       });
     }
 

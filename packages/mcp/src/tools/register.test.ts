@@ -30,6 +30,56 @@ function createServerMock() {
 }
 
 describe("registerTools", () => {
+  it.each([false, true])(
+    "passes optional total request %s and preserves continuation",
+    async (includeTotal) => {
+      const { server, tools } = createServerMock();
+      const value = {
+        pagination: {
+          total: includeTotal ? 100 : null,
+          nextPage: 2,
+          hasMore: true,
+        },
+      };
+      const client = { json: vi.fn().mockResolvedValue(value) };
+      registerTools(server as never, { client: client as never });
+      const tool = tools.get("list_tasks")!;
+      const args = tool.config.inputSchema!.parse({
+        projectId: "project 1",
+        includeTotal,
+      }) as Record<string, unknown>;
+      const result = await tool.handler(args);
+      expect(client.json).toHaveBeenCalledWith(
+        `/api/task/agent/summary/project%201?includeTotal=${includeTotal}`,
+        { method: "GET" },
+      );
+      expect(JSON.parse(result.content[0]!.text)).toEqual(value);
+    },
+  );
+  it("uses bounded context defaults and preserves explicit truncation and continuation", async () => {
+    const { server, tools } = createServerMock();
+    const value = {
+      task: { id: "task 1" },
+      pagination: { nextPage: 2 },
+      truncation: { relations: true },
+    };
+    const client = { json: vi.fn().mockResolvedValue(value) };
+    registerTools(server as never, { client: client as never });
+    const tool = tools.get("get_task_context")!;
+    const args = tool.config.inputSchema!.parse({ taskId: "task 1" }) as Record<
+      string,
+      unknown
+    >;
+    const result = await tool.handler(args);
+    expect(client.json).toHaveBeenCalledOnce();
+    expect(client.json).toHaveBeenCalledWith(
+      "/api/task/agent/context/task%201?page=1&limit=25",
+    );
+    expect(JSON.parse(result.content[0]!.text)).toEqual(value);
+    expect(() =>
+      tool.config.inputSchema!.parse({ taskId: "task 1", limit: 101 }),
+    ).toThrow();
+  });
   it("registers the MCP tools", () => {
     const { server } = createServerMock();
     const client = { json: vi.fn() };
@@ -65,7 +115,7 @@ describe("registerTools", () => {
     });
 
     expect(client.json).toHaveBeenCalledWith(
-      "/api/task/tasks/project%201?status=open&page=2&sortOrder=desc",
+      "/api/task/agent/summary/project%201?status=open&page=2&sortOrder=desc",
       { method: "GET" },
     );
     expect(result).toEqual({
@@ -88,6 +138,7 @@ describe("registerTools", () => {
         .mockResolvedValueOnce({ id: "epic-1" })
         .mockResolvedValueOnce({
           title: "Epic",
+          version: 1,
           description: "",
           status: "to-do",
           priority: "medium",
@@ -121,6 +172,7 @@ describe("registerTools", () => {
     });
     await tools.get("update_task")?.handler({
       taskId: "epic-1",
+      expectedVersion: 1,
       workItemType: "sub_epic",
       taskCategory: "agent_blocker",
       strategyHorizons: ["ultra_long_term"],
@@ -128,7 +180,7 @@ describe("registerTools", () => {
 
     expect(client.json).toHaveBeenNthCalledWith(
       1,
-      "/api/task/tasks/project-1?workItemType=epic&taskCategory=research",
+      "/api/task/agent/summary/project-1?workItemType=epic&taskCategory=research",
       { method: "GET" },
     );
     expect(JSON.parse(client.json.mock.calls[1]?.[1]?.body)).toMatchObject({
@@ -173,7 +225,7 @@ describe("registerTools", () => {
     ).toThrow();
   });
 
-  it("fetches the current task and sends a full body for update_task", async () => {
+  it("fetches the current task and sends only supplied fields with revision for update_task", async () => {
     const { server, tools } = createServerMock();
     const client = {
       json: vi
@@ -185,6 +237,7 @@ describe("registerTools", () => {
           priority: "medium",
           projectId: "project-1",
           position: 4,
+          version: 7,
         })
         .mockResolvedValueOnce({ id: "task-1", status: "done" }),
     };
@@ -193,6 +246,7 @@ describe("registerTools", () => {
 
     const result = await tools.get("update_task")?.handler({
       taskId: "task-1",
+      expectedVersion: 7,
       status: "done",
     });
 
@@ -200,20 +254,11 @@ describe("registerTools", () => {
       method: "GET",
     });
     const putCall = client.json.mock.calls[1];
-    expect(putCall?.[0]).toBe("/api/task/task-1");
+    expect(putCall?.[0]).toBe("/api/task/agent/task-1");
     const putBody = JSON.parse(
       String((putCall?.[1] as { body?: string })?.body ?? "{}"),
     );
-    expect(putBody).toEqual(
-      expect.objectContaining({
-        title: "Draft spec",
-        description: "Write docs",
-        status: "done",
-        priority: "medium",
-        projectId: "project-1",
-        position: 4,
-      }),
-    );
+    expect(putBody).toEqual({ status: "done", expectedVersion: 7 });
     expect(result?.isError).toBe(false);
   });
 

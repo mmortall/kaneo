@@ -87,22 +87,18 @@ async function createTask({
     ),
   });
 
-  const [maxPositionResult] = await db
-    .select({ maxPosition: max(taskTable.position) })
-    .from(taskTable)
-    .where(
-      and(
-        eq(taskTable.projectId, projectId),
-        column?.id
-          ? eq(taskTable.columnId, column.id)
-          : eq(taskTable.status, resolvedStatus),
-      ),
-    );
-
-  const nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
-
   const createdTask = await db.transaction(async (tx) => {
     const taskNumber = await claimTaskNumber(projectId, tx);
+    const [maxPositionResult] = await tx
+      .select({ maxPosition: max(taskTable.position) })
+      .from(taskTable)
+      .where(
+        and(
+          eq(taskTable.projectId, projectId),
+          eq(taskTable.status, resolvedStatus),
+        ),
+      );
+    const nextPosition = (maxPositionResult?.maxPosition ?? 0) + 1;
 
     const [task] = await tx
       .insert(taskTable)

@@ -1,3 +1,4 @@
+import { getTableName } from "drizzle-orm";
 import {
   afterEach,
   beforeEach,
@@ -11,6 +12,85 @@ import {
 const mockFindFirst = vi.fn();
 const mockSelect = vi.fn();
 const mockDelete = vi.fn();
+const mockUpdate = vi.fn();
+const mockTransaction = vi.fn(async (callback: (tx: unknown) => unknown) => {
+  let affected:
+    | Promise<
+        {
+          label: typeof TASK_LABEL_1;
+          taskId: string;
+          projectId: string;
+          workspaceId: string;
+        }[]
+      >
+    | undefined;
+  const load = () =>
+    (affected ??= mockSelect().from().innerJoin().innerJoin().where());
+  return callback({
+    query: {
+      labelTable: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
+    },
+    select: () => {
+      let table = "";
+      let joined = false;
+      const rows = async () => {
+        if (joined) return load();
+        const copies = await load();
+        if (table === "task")
+          return copies.map((copy) => ({
+            id: copy.taskId,
+            projectId: copy.projectId,
+          }));
+        if (table === "project")
+          return [
+            ...new Map(
+              copies.map((copy) => [
+                copy.projectId,
+                { workspaceId: copy.workspaceId },
+              ]),
+            ).values(),
+          ];
+        return copies.map((copy) => copy.label);
+      };
+      const chain = {
+        from: (value: Parameters<typeof getTableName>[0]) => {
+          table = getTableName(value);
+          return chain;
+        },
+        innerJoin: () => {
+          joined = true;
+          return chain;
+        },
+        where: () => chain,
+        orderBy: () => chain,
+        for: () =>
+          table === "label"
+            ? mockFindFirst().then((label: unknown) => [label])
+            : rows(),
+        // biome-ignore lint/suspicious/noThenProperty: the query-builder mock must be awaitable like drizzle's builder
+        then: (
+          resolve: (rows: unknown[]) => unknown,
+          reject: (error: unknown) => unknown,
+        ) => rows().then(resolve, reject),
+      };
+      return chain;
+    },
+    delete: (...args: unknown[]) => ({
+      where: (condition: unknown) => ({
+        returning: async () => [
+          ...(await mockDelete(...args)
+            .where(condition)
+            .returning()),
+          ...(await load()).map((copy) => copy.label),
+        ],
+      }),
+    }),
+    update: (...args: unknown[]) => {
+      mockUpdate(...args);
+      return { set: () => ({ where: async () => undefined }) };
+    },
+  });
+});
 const mockPublishEvent = vi.fn();
 const mockRemoveLabelFromGitHub = vi.fn();
 const mockRemoveLabelFromGitea = vi.fn();
@@ -24,6 +104,8 @@ vi.mock("../../../apps/api/src/database", () => ({
     },
     select: (...args: unknown[]) => mockSelect(...args),
     delete: (...args: unknown[]) => mockDelete(...args),
+    transaction: (callback: (tx: unknown) => unknown) =>
+      mockTransaction(callback),
   },
 }));
 

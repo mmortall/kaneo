@@ -19,14 +19,18 @@ function SearchComponent() {
   const { t } = useTranslation();
   const { workspaceId } = Route.useParams();
   const navigate = useNavigate();
+  const [taskArchive, setTaskArchive] = useState<"active" | "archived" | "all">(
+    "active",
+  );
   const [searchInput, setSearchInput] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data, isLoading, isFetching } = useGlobalSearch({
+  const { data, isLoading, isFetching, error } = useGlobalSearch({
     q: debouncedQuery,
     workspaceId,
     type: "tasks",
+    taskArchive,
   });
 
   const handleInputChange = useCallback((value: string) => {
@@ -93,6 +97,33 @@ function SearchComponent() {
                 <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 animate-spin text-muted-foreground" />
               )}
             </div>
+            {/* biome-ignore lint/a11y/useSemanticElements: styled segmented control, not a form fieldset */}
+            <div
+              className="mt-3 flex gap-2"
+              role="group"
+              aria-label="Task archive scope"
+            >
+              {(["active", "archived", "all"] as const).map((scope) => (
+                <Button
+                  key={scope}
+                  variant={taskArchive === scope ? "default" : "outline"}
+                  size="sm"
+                  aria-pressed={taskArchive === scope}
+                  onClick={() => setTaskArchive(scope)}
+                >
+                  {scope === "active"
+                    ? "Active tasks"
+                    : scope === "archived"
+                      ? "Archive"
+                      : "All tasks"}
+                </Button>
+              ))}
+            </div>
+            {error && (
+              <p role="alert" className="mt-2 text-sm text-destructive">
+                {error.message}
+              </p>
+            )}
             <p className="text-sm text-muted-foreground mt-2">
               {t("workspace:search.hint")}
             </p>

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
@@ -11,7 +12,17 @@ import { publishEvent } from "../../events";
 import createNotification from "../../notification/controllers/create-notification";
 import { parseMentionIds } from "../../utils/parse-mentions";
 
-async function createComment(taskId: string, userId: string, content: string) {
+async function createComment(
+  taskId: string,
+  userId: string,
+  content: string,
+  key?: string,
+) {
+  if (key && !/^[\w:.-]{1,128}$/.test(key))
+    throw new HTTPException(400, { message: "Invalid Idempotency-Key" });
+  const operationKey = key
+    ? createHash("sha256").update(`${userId}:${taskId}:${key}`).digest("hex")
+    : undefined;
   const [activity] = await db
     .insert(activityTable)
     .values({
@@ -19,10 +30,22 @@ async function createComment(taskId: string, userId: string, content: string) {
       type: "comment",
       userId,
       content,
+      operationKey,
     })
+    .onConflictDoNothing()
     .returning();
 
   if (!activity) {
+    if (operationKey) {
+      const [existing] = await db
+        .select()
+        .from(activityTable)
+        .where(eq(activityTable.operationKey, operationKey));
+      if (existing?.content === content) return existing;
+      throw new HTTPException(409, {
+        message: "Idempotency key reused with different comment",
+      });
+    }
     throw new HTTPException(500, {
       message: "Failed to create activity",
     });

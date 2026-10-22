@@ -1,5 +1,36 @@
+import { QueryClient } from "@tanstack/react-query";
 import { describe, expect, it } from "vitest";
-import { updateTaskLabelsInProject } from "./sync-task-labels-cache";
+import {
+  addLabelToTaskInTasksCache,
+  removeLabelFromTaskInTasksCache,
+  updateTaskLabelsInProject,
+} from "./sync-task-labels-cache";
+
+it("preserves workspace and paged cache shapes during legacy label updates", () => {
+  const client = new QueryClient();
+  const workspaceKey = ["tasks", "my", "workspace", "user"];
+  const pageKey = ["tasks", "project", "view", { page: 2 }];
+  const workspace = {
+    projects: [],
+    pagination: { page: 1 },
+    counts: { total: 0 },
+  };
+  const page = {
+    data: { columns: [], plannedTasks: [], archivedTasks: [] },
+    pagination: { page: 2 },
+  };
+  client.setQueryData(workspaceKey, workspace);
+  client.setQueryData(pageKey, page);
+  addLabelToTaskInTasksCache(client, "task", {
+    id: "label",
+    name: "Label",
+    color: "blue",
+  });
+  removeLabelFromTaskInTasksCache(client, "task", "label");
+  expect(client.getQueryData(workspaceKey)).toBe(workspace);
+  expect(client.getQueryData(pageKey)).toBe(page);
+  client.clear();
+});
 
 describe("updateTaskLabelsInProject", () => {
   it("adds a label to the matching task without changing other tasks", () => {

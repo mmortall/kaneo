@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import {
@@ -19,7 +19,12 @@ import {
 
 type LabelRow = typeof labelTableType.$inferSelect;
 
-async function assignLabelToTask(id: string, taskId: string, userId: string) {
+async function assignLabelToTask(
+  id: string,
+  taskId: string,
+  userId: string,
+  workspaceId?: string,
+) {
   const label = await db.query.labelTable.findFirst({
     where: (label, { eq }) => eq(label.id, id),
   });
@@ -65,15 +70,51 @@ async function assignLabelToTask(id: string, taskId: string, userId: string) {
   };
   const { taskLabel, inserted, previousTaskId, previousName } =
     await db.transaction<InsertionResult>(async (tx) => {
-      const currentLabel = await tx.query.labelTable.findFirst({
-        where: (label, { eq }) => eq(label.id, id),
-      });
+      const locked = await tx
+        .select({ id: taskTable.id, projectId: taskTable.projectId })
+        .from(taskTable)
+        .where(
+          inArray(taskTable.id, [
+            ...new Set([taskId, ...(label.taskId ? [label.taskId] : [])]),
+          ]),
+        )
+        .orderBy(asc(taskTable.id))
+        .for("update");
+      const target = locked.find((row) => row.id === taskId);
+      if (!target || target.projectId !== task.projectId)
+        throw new HTTPException(409, {
+          message: "Task moved or disappeared; reload before attaching label",
+        });
+      const projectIds = [...new Set(locked.map((task) => task.projectId))];
+      const projects = await tx
+        .select({ workspaceId: projectTable.workspaceId })
+        .from(projectTable)
+        .where(inArray(projectTable.id, projectIds));
+      if (
+        projects.length !== projectIds.length ||
+        projects.some(
+          (project) =>
+            project.workspaceId !== (workspaceId ?? task.workspaceId),
+        )
+      )
+        throw new HTTPException(409, {
+          message: "Task workspace changed; reload before attaching label",
+        });
+      const [currentLabel] = await tx
+        .select()
+        .from(labelTable)
+        .where(eq(labelTable.id, id))
+        .for("update");
 
       if (!currentLabel) {
         throw new HTTPException(404, {
           message: "Label not found",
         });
       }
+      if (currentLabel.taskId !== label.taskId)
+        throw new HTTPException(409, {
+          message: "Label assignment changed; reload before attaching label",
+        });
 
       if (
         currentLabel.workspaceId &&
@@ -96,6 +137,10 @@ async function assignLabelToTask(id: string, taskId: string, userId: string) {
       const previousTaskId = currentLabel.taskId;
       if (previousTaskId) {
         await tx.delete(labelTable).where(eq(labelTable.id, id));
+        await tx
+          .update(taskTable)
+          .set({ updatedAt: new Date() })
+          .where(eq(taskTable.id, previousTaskId));
       }
 
       const [insertedRow] = await tx
@@ -112,6 +157,10 @@ async function assignLabelToTask(id: string, taskId: string, userId: string) {
         .returning();
 
       if (insertedRow) {
+        await tx
+          .update(taskTable)
+          .set({ updatedAt: new Date() })
+          .where(eq(taskTable.id, taskId));
         return {
           taskLabel: insertedRow,
           inserted: true,

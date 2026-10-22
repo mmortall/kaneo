@@ -1,54 +1,30 @@
-import { produce } from "immer";
 import { Archive, Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import CreateTaskModal from "@/components/shared/modals/create-task-modal";
-import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { getColumnIcon } from "@/lib/column";
-import { toast } from "@/lib/toast";
 import useProjectStore from "@/store/project";
 import type { ProjectWithTasks } from "@/types/project";
 import { ArchiveTasksModal } from "../../shared/modals/archive-tasks-modal";
 
 type ColumnHeaderProps = {
   column: ProjectWithTasks["columns"][number];
+  taskCount?: number;
 };
 
-export function ColumnHeader({ column }: ColumnHeaderProps) {
+export function ColumnHeader({
+  column,
+  taskCount = column.tasks.length,
+}: ColumnHeaderProps) {
   const { t } = useTranslation();
-  const { project, setProject } = useProjectStore();
-  const { mutate: updateTask } = useUpdateTask();
+  const { project } = useProjectStore();
   const { canManageTasks, canCreateTasks } = useWorkspacePermission();
   const canTask = canManageTasks();
   const canCreate = canCreateTasks();
 
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-
-  const handleConfirmArchive = () => {
-    if (!column.isFinal || !project) return;
-
-    const updatedProject = produce(project, (draft) => {
-      const archivedColumn = draft?.columns?.find(
-        (col) => col.id === column.id,
-      );
-      if (!archivedColumn) return;
-
-      for (const task of archivedColumn.tasks) {
-        updateTask({
-          ...task,
-          status: "archived",
-        });
-      }
-
-      archivedColumn.tasks = [];
-    });
-
-    setProject(updatedProject);
-    toast.success(t("tasks:archive.success", { count: column.tasks.length }));
-    setIsArchiveModalOpen(false);
-  };
 
   return (
     <div className="flex items-center justify-between gap-2">
@@ -60,12 +36,12 @@ export function ColumnHeader({ column }: ColumnHeaderProps) {
           {column.name}
         </span>
         <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-          {column.tasks.length}
+          {taskCount}
         </span>
       </div>
 
       <div className="flex items-center">
-        {canTask && column.isFinal && column.tasks.length > 0 && (
+        {canTask && column.isFinal && taskCount > 0 && (
           <button
             type="button"
             onClick={() => setIsArchiveModalOpen(true)}
@@ -97,8 +73,8 @@ export function ColumnHeader({ column }: ColumnHeaderProps) {
       <ArchiveTasksModal
         open={isArchiveModalOpen}
         onClose={() => setIsArchiveModalOpen(false)}
-        onConfirm={handleConfirmArchive}
-        taskCount={column.tasks.length}
+        projectId={project?.id}
+        sourceStatus={column.id}
       />
     </div>
   );

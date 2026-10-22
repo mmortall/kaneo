@@ -2,7 +2,7 @@ import type { PluginContext, TaskDescriptionChangedEvent } from "../../types";
 import type { GitHubConfig } from "../config";
 import {
   findExternalLinksByTask,
-  updateExternalLink,
+  recordExternalLinkFieldSync,
 } from "../services/link-manager";
 import { formatIssueBody } from "../utils/format";
 import { getGithubApp, getInstallationIdForRepo } from "../utils/github-app";
@@ -46,16 +46,6 @@ export async function handleTaskDescriptionChanged(
         console.log("Skipping description sync - already synced from GitHub");
         return;
       }
-
-      // Skip if recent sync (within 2 seconds) to prevent rapid loops
-      const timeSinceLastSync =
-        Date.now() - new Date(lastDescSync.timestamp).getTime();
-      if (timeSinceLastSync < 2000) {
-        console.log(
-          `Skipping description sync - recent sync detected (${timeSinceLastSync}ms ago)`,
-        );
-        return;
-      }
     }
 
     let installationId = config.installationId;
@@ -80,18 +70,13 @@ export async function handleTaskDescriptionChanged(
     });
 
     // Update metadata to track this sync
-    await updateExternalLink(issueLink.id, {
-      metadata: {
-        ...metadata,
-        lastSync: {
-          ...metadata.lastSync,
-          description: {
-            timestamp: new Date().toISOString(),
-            source: "kaneo",
-            value: newDescNormalized,
-          },
-        },
-      },
+    await recordExternalLinkFieldSync({
+      linkId: issueLink.id,
+      taskId: event.taskId,
+      integrationId: context.integrationId,
+      externalId: issueLink.externalId,
+      field: "description",
+      value: newDescNormalized,
     });
 
     console.log(`Synced task description to GitHub issue #${issueNumber}`);

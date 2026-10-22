@@ -20,18 +20,16 @@ import {
 } from "@dnd-kit/sortable";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { produce } from "immer";
 import { Archive, ChevronRight, Flag, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { priorityColorsTaskCard } from "@/constants/priority-colors";
-import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
+import { useOrderTask } from "@/hooks/mutations/task/use-order-task";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { cn } from "@/lib/cn";
 import { getColumnIcon } from "@/lib/column";
-import { toast } from "@/lib/toast";
+import { taskDragOrder } from "@/lib/task-drag-order";
 import useBulkSelectionStore from "@/store/bulk-selection";
-import useProjectStore from "@/store/project";
 import type { ProjectWithTasks } from "@/types/project";
 import BulkToolbar from "../bulk-selection/bulk-toolbar";
 import { ArchiveTasksModal } from "../shared/modals/archive-tasks-modal";
@@ -45,7 +43,6 @@ type ListViewProps = {
 
 function ListView({ project, disableDragDrop = false }: ListViewProps) {
   const { t } = useTranslation();
-  const { setProject } = useProjectStore();
   const {
     setAvailableTasks,
     focusNext,
@@ -53,8 +50,8 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
     focusedTaskId,
     clearFocus,
   } = useBulkSelectionStore();
-  const { mutate: updateTask } = useUpdateTask();
   const navigate = useNavigate();
+  const orderTask = useOrderTask();
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<
@@ -161,78 +158,15 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
     setActiveId(null);
     setOverColumnId(null);
-
-    if (!over || !project?.columns) return;
-
-    const activeTaskId = active.id.toString();
-    const overId = over.id.toString();
-
-    const updatedProject = produce(project, (draft) => {
-      const sourceColumn = draft?.columns?.find((col) =>
-        col.tasks.some((task) => task.id === activeTaskId),
-      );
-      const destinationColumn = draft?.columns?.find(
-        (col) =>
-          col.id === overId || col.tasks.some((task) => task.id === overId),
-      );
-
-      if (!sourceColumn || !destinationColumn) return;
-
-      const sourceTaskIndex = sourceColumn.tasks.findIndex(
-        (task) => task.id === activeTaskId,
-      );
-      const task = sourceColumn.tasks[sourceTaskIndex];
-
-      sourceColumn.tasks = sourceColumn.tasks.filter(
-        (t) => t.id !== activeTaskId,
-      );
-
-      if (sourceColumn.id === destinationColumn.id) {
-        let destinationIndex = destinationColumn.tasks.findIndex(
-          (t) => t.id === overId,
-        );
-        if (sourceTaskIndex <= destinationIndex) {
-          destinationIndex += 1;
-        }
-        destinationColumn.tasks.splice(destinationIndex, 0, task);
-
-        destinationColumn.tasks.forEach((t, index) => {
-          updateTask({
-            ...t,
-            status: destinationColumn.id,
-            position: index,
-          });
-        });
-      } else {
-        task.status = destinationColumn.id;
-        const destinationIndex =
-          overId === destinationColumn.id
-            ? destinationColumn.tasks.length
-            : destinationColumn.tasks.findIndex((t) => t.id === overId) + 1;
-
-        destinationColumn.tasks.splice(destinationIndex, 0, task);
-
-        destinationColumn.tasks.forEach((t, index) => {
-          updateTask({
-            ...t,
-            status: destinationColumn.id,
-            position: index,
-          });
-        });
-
-        sourceColumn.tasks.forEach((t, index) => {
-          updateTask({
-            ...t,
-            position: index,
-          });
-        });
-      }
-    });
-
-    setProject(updatedProject);
+    if (!event.over || disableDragDrop || orderTask.isPending) return;
+    const intent = taskDragOrder(
+      project?.columns ?? [],
+      event.active.id.toString(),
+      event.over.id.toString(),
+    );
+    if (intent) orderTask.mutate(intent);
   };
 
   const toggleSection = (sectionId: string) => {
@@ -243,37 +177,13 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
   };
 
   const handleArchiveClick = (column: ProjectWithTasks["columns"][number]) => {
-    if (!column.isFinal || column.tasks.length === 0) return;
+    if (
+      !column.isFinal ||
+      (project.countsByStatus?.[column.id] ?? column.tasks.length) === 0
+    )
+      return;
     setColumnToArchive(column);
     setIsArchiveModalOpen(true);
-  };
-
-  const handleConfirmArchive = () => {
-    if (!columnToArchive) return;
-
-    const updatedProject = produce(project, (draft) => {
-      const archivedColumn = draft?.columns?.find(
-        (col) => col.id === columnToArchive.id,
-      );
-      if (!archivedColumn) return;
-
-      for (const task of archivedColumn.tasks) {
-        updateTask({
-          ...task,
-          status: "archived",
-        });
-      }
-
-      archivedColumn.tasks = [];
-    });
-
-    setProject(updatedProject);
-    toast.success(
-      t("tasks:archive.success", { count: columnToArchive.tasks.length }),
-    );
-
-    setIsArchiveModalOpen(false);
-    setColumnToArchive(null);
   };
 
   function ColumnSection({
@@ -315,7 +225,7 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
               <div className="flex items-center gap-1">
                 <span className="mt-1 mr-1">{column.name}</span>
                 <span className="text-xs text-muted-foreground mt-0.5">
-                  {column.tasks.length}
+                  {project.countsByStatus?.[column.id] ?? column.tasks.length}
                 </span>
               </div>
             </div>
@@ -334,16 +244,18 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
               <Plus className="w-3 h-3" />
             </button>
 
-            {column.isFinal && column.tasks.length > 0 && (
-              <button
-                type="button"
-                onClick={() => handleArchiveClick(column)}
-                className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground transition-colors"
-                title={t("tasks:listView.archiveAllTooltip")}
-              >
-                <Archive className="w-3 h-3" />
-              </button>
-            )}
+            {column.isFinal &&
+              (project.countsByStatus?.[column.id] ?? column.tasks.length) >
+                0 && (
+                <button
+                  type="button"
+                  onClick={() => handleArchiveClick(column)}
+                  className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground transition-colors"
+                  title={t("tasks:listView.archiveAllTooltip")}
+                >
+                  <Archive className="w-3 h-3" />
+                </button>
+              )}
           </div>
         </div>
 
@@ -373,7 +285,9 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
 
             {column.tasks.length === 0 && (
               <div className="py-6 px-4 text-center text-xs text-muted-foreground">
-                {t("tasks:listView.noTasks")}
+                {(project.countsByStatus?.[column.id] ?? 0) > 0
+                  ? "No tasks on this page."
+                  : t("tasks:listView.noTasks")}
               </div>
             )}
           </div>
@@ -451,8 +365,8 @@ function ListView({ project, disableDragDrop = false }: ListViewProps) {
           setIsArchiveModalOpen(false);
           setColumnToArchive(null);
         }}
-        onConfirm={handleConfirmArchive}
-        taskCount={columnToArchive?.tasks.length ?? 0}
+        projectId={project.id}
+        sourceStatus={columnToArchive?.id}
       />
 
       <BulkToolbar />

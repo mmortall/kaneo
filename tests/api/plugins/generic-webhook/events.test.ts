@@ -1,4 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  publishEventAndWait,
+  shutdownEventBus,
+  subscribeToEvent,
+} from "../../../../apps/api/src/events";
 import { postToGenericWebhook } from "../../../../apps/api/src/plugins/generic-webhook/client";
 import {
   handleTaskDeleted,
@@ -59,6 +64,34 @@ const deletedEvent = {
 };
 
 describe("generic webhook event handlers", () => {
+  it("propagates failed deletion webhook to durable delivery but preserves ordinary behavior", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    selectMock.mockImplementation(() =>
+      selectChain([
+        { id: "project-1", name: "Roadmap", workspaceId: "workspace-1" },
+      ]),
+    );
+    vi.mocked(postToGenericWebhook).mockRejectedValueOnce(
+      new Error("Provider unavailable"),
+    );
+    try {
+      await subscribeToEvent("test.webhook.delete", async () =>
+        handleTaskDeleted(deletedEvent, enabledContext),
+      );
+      await expect(
+        publishEventAndWait("test.webhook.delete", {}),
+      ).rejects.toThrow("Event subscriber failed");
+      vi.mocked(postToGenericWebhook).mockRejectedValueOnce(
+        new Error("Provider unavailable"),
+      );
+      await expect(
+        handleTaskDeleted(deletedEvent, enabledContext),
+      ).resolves.toBeUndefined();
+    } finally {
+      await shutdownEventBus();
+      log.mockRestore();
+    }
+  });
   beforeEach(() => {
     vi.mocked(postToGenericWebhook).mockClear();
     selectMock.mockReset();

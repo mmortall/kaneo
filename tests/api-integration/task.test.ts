@@ -309,6 +309,7 @@ describe("API integration: task creation", () => {
     const created = (await createResponse.json()) as {
       id: string;
       position: number;
+      version: number;
       taskCategory: string;
       strategyHorizons: string[];
     };
@@ -344,6 +345,7 @@ describe("API integration: task creation", () => {
         status: "to-do",
         projectId: project.id,
         position: created.position,
+        expectedVersion: created.version,
         userId: member.user.id,
         taskCategory: "agent_blocker",
         strategyHorizons: ["ultra_long_term"],

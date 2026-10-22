@@ -6,6 +6,49 @@ import db, { schema } from "../database";
 import { isInstanceAdmin } from "./is-instance-admin";
 
 type PermissionMap = Record<string, string[]>;
+type PermissionDatabase =
+  | typeof db
+  | Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Recheck mutable user, membership and role grants while mutation holds locks. */
+export async function hasLockedWorkspacePermission(
+  database: PermissionDatabase,
+  userId: string,
+  workspaceId: string,
+  permissions: PermissionMap,
+) {
+  const [user] = await database
+    .select({ role: schema.userTable.role })
+    .from(schema.userTable)
+    .where(eq(schema.userTable.id, userId))
+    .for("share");
+  if (user?.role === "admin") return true;
+  const [member] = await database
+    .select({ role: schema.workspaceUserTable.role })
+    .from(schema.workspaceUserTable)
+    .where(
+      and(
+        eq(schema.workspaceUserTable.workspaceId, workspaceId),
+        eq(schema.workspaceUserTable.userId, userId),
+      ),
+    )
+    .for("share");
+  if (!member) return false;
+  const [role] = await database
+    .select({ permission: schema.workspaceRoleTable.permission })
+    .from(schema.workspaceRoleTable)
+    .where(
+      and(
+        eq(schema.workspaceRoleTable.workspaceId, workspaceId),
+        eq(schema.workspaceRoleTable.role, member.role),
+      ),
+    )
+    .for("share");
+  const statements = role
+    ? parsePermissionStatements(role.permission)
+    : builtInRoleStatements(member.role);
+  return Boolean(statements && satisfies(statements, permissions));
+}
 
 function builtInRoleStatements(
   role: string,

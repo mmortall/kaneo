@@ -2,7 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import type { KaneoClient } from "../kaneo/client.js";
-import { buildFullTaskUpdateBody } from "../kaneo/task-helpers.js";
+import { boundedRegistrar, KaneoRequestError } from "../kaneo/operation.js";
 import { errorResult, textResult } from "../utils/mcp-result.js";
 
 const prioritySchema = z.enum([
@@ -44,7 +44,10 @@ function run(fn: () => Promise<unknown>): Promise<CallToolResult> {
   return fn()
     .then((data) => textResult(data))
     .catch((e: unknown) =>
-      errorResult(e instanceof Error ? e.message : String(e)),
+      errorResult(
+        e instanceof Error ? e.message : String(e),
+        e instanceof KaneoRequestError ? e.details : undefined,
+      ),
     );
 }
 
@@ -53,8 +56,9 @@ export function registerTools(
   ctx: { client: KaneoClient },
 ): void {
   const { client } = ctx;
+  const registerTool = boundedRegistrar(server);
 
-  server.registerTool(
+  registerTool(
     "whoami",
     {
       description:
@@ -65,7 +69,7 @@ export function registerTools(
       run(() => client.json("/api/auth/get-session", { method: "GET" })),
   );
 
-  server.registerTool(
+  registerTool(
     "list_workspaces",
     {
       description:
@@ -76,7 +80,7 @@ export function registerTools(
       run(() => client.json("/api/auth/organization/list", { method: "GET" })),
   );
 
-  server.registerTool(
+  registerTool(
     "list_projects",
     {
       description: "List projects in a workspace.",
@@ -100,7 +104,7 @@ export function registerTools(
     },
   );
 
-  server.registerTool(
+  registerTool(
     "get_project",
     {
       description: "Get a single project by ID.",
@@ -110,7 +114,7 @@ export function registerTools(
       run(() => client.json(`/api/project/${encodeURIComponent(args.id)}`)),
   );
 
-  server.registerTool(
+  registerTool(
     "create_project",
     {
       description: "Create a project in a workspace.",
@@ -135,7 +139,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "update_project",
     {
       description:
@@ -199,11 +203,12 @@ export function registerTools(
 
   const listTasksSchema = z.object({
     projectId: nonEmptyString,
+    includeTotal: z.boolean().optional(),
     status: optionalNonEmptyString,
     priority: prioritySchema.optional(),
     assigneeId: optionalNonEmptyString,
     page: z.number().int().positive().optional(),
-    limit: z.number().int().positive().optional(),
+    limit: z.number().int().positive().max(100).optional(),
     sortBy: z
       .enum(["createdAt", "priority", "dueDate", "position", "title", "number"])
       .optional(),
@@ -216,11 +221,11 @@ export function registerTools(
     unblockPolicy: z.enum(["ai_allowed", "human_required"]).optional(),
   });
 
-  server.registerTool(
+  registerTool(
     "list_tasks",
     {
       description:
-        "List tasks for a project. Use agentReadyOnly and unblockPolicy to select executable work or AI-unblockable blockers.",
+        "List bounded task summaries. Follow pagination.nextPage; request includeTotal=true only when exact totals are needed. Use agentReadyOnly and unblockPolicy to select executable work or AI-unblockable blockers.",
       inputSchema: listTasksSchema,
     },
     async (args) => {
@@ -233,12 +238,12 @@ export function registerTools(
         qs.set(k, String(v));
       }
       const q = qs.toString();
-      const path = `/api/task/tasks/${encodeURIComponent(projectId)}${q ? `?${q}` : ""}`;
+      const path = `/api/task/agent/summary/${encodeURIComponent(projectId)}${q ? `?${q}` : ""}`;
       return run(() => client.json(path, { method: "GET" }));
     },
   );
 
-  server.registerTool(
+  registerTool(
     "get_task",
     {
       description: "Get a task by ID.",
@@ -252,7 +257,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "create_task",
     {
       description:
@@ -315,6 +320,7 @@ export function registerTools(
 
   const updateTaskSchema = z.object({
     taskId: nonEmptyString,
+    expectedVersion: z.number().int().positive(),
     title: optionalNonEmptyString,
     description: z.string().nullable().optional(),
     status: optionalNonEmptyString,
@@ -335,11 +341,11 @@ export function registerTools(
     unblockNote: optionalNonEmptyString,
   });
 
-  server.registerTool(
+  registerTool(
     "update_task",
     {
       description:
-        "Update an AI-ready task. goal and acceptanceCriteria are required when task has no values; human_required blockers cannot be cleared by AI.",
+        "Update an AI-ready task using expectedVersion from the task you read. On conflict, reload and reconcile intent. goal and acceptanceCriteria are required when task has no values; human_required blockers cannot be cleared by AI.",
       inputSchema: updateTaskSchema,
     },
     async (args) => {
@@ -349,51 +355,73 @@ export function registerTools(
           `/api/task/${encodeURIComponent(taskId)}`,
           { method: "GET" },
         )) as Record<string, unknown>;
-        const body = buildFullTaskUpdateBody(existing, patch);
-        return client.json(`/api/task/${encodeURIComponent(taskId)}`, {
-          method: "PUT",
+        if (typeof existing.version !== "number")
+          throw new Error("Task revisions unavailable; upgrade Kaneo API");
+        if (patch.projectId && patch.projectId !== existing.projectId)
+          throw new Error("Use move_task to change project");
+        const { projectId: _projectId, ...fields } = patch;
+        const body = {
+          ...fields,
+          ...(fields.userId === null ? { userId: "" } : {}),
+          expectedVersion: args.expectedVersion,
+        };
+        return client.json(`/api/task/agent/${encodeURIComponent(taskId)}`, {
+          method: "PATCH",
           body: JSON.stringify(body),
         });
       });
     },
   );
 
-  server.registerTool(
+  registerTool(
     "move_task",
     {
       description:
-        "Move a task to another project. AI cannot move human_required blocked tasks without human resolution.",
+        "Move a task using expectedVersion from the task you read. On conflict, reload and reconcile intent. AI cannot move human_required blocked tasks without human resolution.",
       inputSchema: z.object({
         taskId: nonEmptyString,
+        expectedVersion: z.number().int().positive(),
         destinationProjectId: nonEmptyString,
         destinationStatus: optionalNonEmptyString,
         unblockNote: optionalNonEmptyString,
       }),
     },
     async (args) =>
-      run(() =>
-        client.json(`/api/task/move/${encodeURIComponent(args.taskId)}`, {
-          method: "PUT",
-          body: JSON.stringify({
-            destinationProjectId: args.destinationProjectId,
-            ...(args.destinationStatus !== undefined
-              ? { destinationStatus: args.destinationStatus }
-              : {}),
-            ...(args.unblockNote !== undefined
-              ? { unblockNote: args.unblockNote }
-              : {}),
-          }),
-        }),
-      ),
+      run(async () => {
+        const capabilities = await client.json<{
+          versionedTaskMoves?: boolean;
+        }>("/api/task/agent/capabilities", { method: "GET" });
+        if (capabilities.versionedTaskMoves !== true)
+          throw new Error(
+            "Versioned task moves unavailable; upgrade Kaneo API",
+          );
+        return client.json(
+          `/api/task/move/${encodeURIComponent(args.taskId)}`,
+          {
+            method: "PUT",
+            body: JSON.stringify({
+              destinationProjectId: args.destinationProjectId,
+              expectedVersion: args.expectedVersion,
+              ...(args.destinationStatus !== undefined
+                ? { destinationStatus: args.destinationStatus }
+                : {}),
+              ...(args.unblockNote !== undefined
+                ? { unblockNote: args.unblockNote }
+                : {}),
+            }),
+          },
+        );
+      }),
   );
 
-  server.registerTool(
+  registerTool(
     "update_task_status",
     {
       description:
-        "Update task status. Blocking requires reason and policy; closing requires completionSummary; human_required blockers need a human.",
+        "Update task status using expectedVersion from the task you read. On conflict, reload and reconcile intent. Blocking requires reason and policy; closing requires completionSummary; human_required blockers need a human.",
       inputSchema: z.object({
         taskId: nonEmptyString,
+        expectedVersion: z.number().int().positive(),
         status: nonEmptyString,
         goal: optionalNonEmptyString,
         acceptanceCriteria: optionalNonEmptyString,
@@ -404,33 +432,21 @@ export function registerTools(
       }),
     },
     async (args) =>
-      run(() =>
-        client.json(`/api/task/status/${encodeURIComponent(args.taskId)}`, {
-          method: "PUT",
-          body: JSON.stringify({
-            status: args.status,
-            ...(args.goal !== undefined ? { goal: args.goal } : {}),
-            ...(args.acceptanceCriteria !== undefined
-              ? { acceptanceCriteria: args.acceptanceCriteria }
-              : {}),
-            ...(args.blockedReason !== undefined
-              ? { blockedReason: args.blockedReason }
-              : {}),
-            ...(args.unblockPolicy !== undefined
-              ? { unblockPolicy: args.unblockPolicy }
-              : {}),
-            ...(args.completionSummary !== undefined
-              ? { completionSummary: args.completionSummary }
-              : {}),
-            ...(args.unblockNote !== undefined
-              ? { unblockNote: args.unblockNote }
-              : {}),
-          }),
-        }),
-      ),
+      run(async () => {
+        const { taskId, ...fields } = args;
+        const current = await client.json<Record<string, unknown>>(
+          `/api/task/${encodeURIComponent(taskId)}`,
+          { method: "GET" },
+        );
+        if (typeof current.version !== "number")
+          throw new Error("Task revisions unavailable; upgrade Kaneo API");
+        return client.json(`/api/task/agent/${encodeURIComponent(taskId)}`, {
+          method: "PATCH",
+          body: JSON.stringify(fields),
+        });
+      }),
   );
-
-  server.registerTool(
+  registerTool(
     "list_task_comments",
     {
       description: "List comments on a task.",
@@ -444,7 +460,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "create_task_comment",
     {
       description: "Add a comment to a task.",
@@ -462,7 +478,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "update_task_comment",
     {
       description: "Update one of your comments on a task.",
@@ -480,7 +496,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "delete_task_comment",
     {
       description: "Delete one of your comments from a task.",
@@ -494,7 +510,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "list_workspace_labels",
     {
       description: "List labels defined in a workspace.",
@@ -509,7 +525,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "create_label",
     {
       description:
@@ -535,7 +551,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "attach_label_to_task",
     {
       description: "Attach an existing label to a task.",
@@ -553,7 +569,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "detach_label_from_task",
     {
       description: "Detach a label from its current task.",
@@ -567,7 +583,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "create_task_relation",
     {
       description:
@@ -591,7 +607,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "get_task_relations",
     {
       description:
@@ -606,7 +622,26 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
+    "get_task_context",
+    {
+      description:
+        "Read bounded task context and authorized ancestors. Follow pagination.nextPage for additional relations; truncation identifies abbreviated fields and omitted linked details.",
+      inputSchema: z.object({
+        taskId: nonEmptyString,
+        page: z.number().int().min(1).default(1),
+        limit: z.number().int().min(1).max(100).default(25),
+      }),
+    },
+    async (args) =>
+      run(() =>
+        client.json(
+          `/api/task/agent/context/${encodeURIComponent(args.taskId)}?page=${args.page}&limit=${args.limit}`,
+        ),
+      ),
+  );
+
+  registerTool(
     "delete_task_relation",
     {
       description: "Delete a task relation by its relation ID.",
@@ -620,7 +655,7 @@ export function registerTools(
       ),
   );
 
-  server.registerTool(
+  registerTool(
     "delete_label",
     {
       description:

@@ -1,5 +1,6 @@
 import { addWeeks, endOfWeek, isWithinInterval, startOfWeek } from "date-fns";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { matchesLabelSelection } from "@/lib/label-filter-selection";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 import type { ProjectWithTasks } from "@/types/project";
 import type Task from "@/types/task";
@@ -167,11 +168,9 @@ export function useTaskFiltersWithLabelsSupport(
 
         // Label filtering
         if (filters.labels && filters.labels.length > 0) {
-          const taskLabelIds = (task.labels ?? []).map((label) => label.id);
-
-          // Check if task has at least one of the selected labels
-          const hasMatchingLabel = filters.labels.some((labelId) =>
-            taskLabelIds.includes(labelId),
+          const hasMatchingLabel = matchesLabelSelection(
+            filters.labels,
+            task.labels ?? [],
           );
 
           if (!hasMatchingLabel) {

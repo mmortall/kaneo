@@ -213,6 +213,7 @@ subscribeToEvent<{
   newStatus: string;
   title: string;
   assigneeId?: string;
+  operationKey?: string;
 }>("task.status_changed", async (data) => {
   if (data.assigneeId && data.assigneeId !== data.userId) {
     const [task] = await db
@@ -232,6 +233,9 @@ subscribeToEvent<{
     await createNotification({
       userId: data.assigneeId,
       type: "task_status_changed",
+      operationKey: data.operationKey
+        ? `group-notification:${data.operationKey}:${data.assigneeId}`
+        : undefined,
       eventData: {
         taskTitle: data.title,
         oldStatus: data.oldStatus,

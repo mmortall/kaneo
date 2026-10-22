@@ -14,46 +14,55 @@ async function createLabel(
   userId: string,
 ) {
   if (taskId) {
-    const [task] = await db
-      .select({
-        id: taskTable.id,
-        projectId: taskTable.projectId,
-        workspaceId: projectTable.workspaceId,
-      })
-      .from(taskTable)
-      .innerJoin(projectTable, eq(taskTable.projectId, projectTable.id))
-      .where(eq(taskTable.id, taskId))
-      .limit(1);
+    const { task, label, inserted } = await db.transaction(async (tx) => {
+      const [task] = await tx
+        .select({
+          id: taskTable.id,
+          projectId: taskTable.projectId,
+          workspaceId: projectTable.workspaceId,
+        })
+        .from(taskTable)
+        .innerJoin(projectTable, eq(taskTable.projectId, projectTable.id))
+        .where(eq(taskTable.id, taskId))
+        .for("update", { of: taskTable });
 
-    if (!task) {
-      throw new HTTPException(404, {
-        message: "Task not found",
-      });
-    }
+      if (!task) {
+        throw new HTTPException(404, {
+          message: "Task not found",
+        });
+      }
 
-    if (task.workspaceId !== workspaceId) {
-      throw new HTTPException(404, {
-        message: "Task not found",
-      });
-    }
+      if (task.workspaceId !== workspaceId) {
+        throw new HTTPException(404, {
+          message: "Task not found",
+        });
+      }
 
-    const [inserted] = await db
-      .insert(labelTable)
-      .values({ name, color, taskId, workspaceId: task.workspaceId })
-      .onConflictDoNothing({
-        target: [labelTable.taskId, labelTable.name],
-      })
-      .returning();
+      const [inserted] = await tx
+        .insert(labelTable)
+        .values({ name, color, taskId, workspaceId: task.workspaceId })
+        .onConflictDoNothing({
+          target: [labelTable.taskId, labelTable.name],
+        })
+        .returning();
 
-    const label =
-      inserted ??
-      (await db.query.labelTable.findFirst({
-        where: and(eq(labelTable.taskId, taskId), eq(labelTable.name, name)),
-      }));
+      const label =
+        inserted ??
+        (await tx.query.labelTable.findFirst({
+          where: and(eq(labelTable.taskId, taskId), eq(labelTable.name, name)),
+        }));
 
-    if (!label) {
-      throw new Error("Failed to create or resolve label");
-    }
+      if (!label) {
+        throw new Error("Failed to create or resolve label");
+      }
+
+      if (inserted)
+        await tx
+          .update(taskTable)
+          .set({ updatedAt: new Date() })
+          .where(eq(taskTable.id, taskId));
+      return { task, label, inserted };
+    });
 
     if (inserted) {
       syncLabelToGitHub(taskId, name, color).catch((error) => {

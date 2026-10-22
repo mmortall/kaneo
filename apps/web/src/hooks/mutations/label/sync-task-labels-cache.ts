@@ -55,7 +55,10 @@ export function syncTaskLabelsInTasksCache(
       queryKey: ["tasks"],
     },
     (existingProject) =>
-      existingProject
+      existingProject &&
+      Array.isArray(existingProject.columns) &&
+      Array.isArray(existingProject.plannedTasks) &&
+      Array.isArray(existingProject.archivedTasks)
         ? updateTaskLabelsInProject(existingProject, taskId, updater)
         : existingProject,
   );

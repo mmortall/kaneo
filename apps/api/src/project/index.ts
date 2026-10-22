@@ -102,11 +102,19 @@ const project = new Hono<{
       },
     }),
     validator("param", v.object({ id: v.string() })),
+    validator(
+      "query",
+      v.object({ summary: v.optional(v.picklist(["true", "false"])) }),
+    ),
     workspaceAccess.fromProject(),
     async (c) => {
       const { id } = c.req.valid("param");
       const workspaceId = c.get("workspaceId");
-      const projectData = await getProjectCtrl(id, workspaceId);
+      const projectData = await getProjectCtrl(
+        id,
+        workspaceId,
+        c.req.valid("query").summary === "true",
+      );
       return c.json(projectData);
     },
   )

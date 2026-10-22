@@ -1,24 +1,14 @@
-import { client } from "@kaneo/libs";
 import type Task from "@/types/task";
+import patchTask from "./patch-task";
 
-type UpdateTaskStatusPayload = Pick<Task, "status">;
-
-async function updateTaskStatus(taskId: string, task: UpdateTaskStatusPayload) {
-  const response = await client.task.status[":id"].$put({
-    param: { id: taskId },
-    json: {
-      status: task.status || "",
-    },
+export default function updateTaskStatus(
+  taskId: string,
+  task: Pick<Task, "status" | "version" | "completionSummary">,
+) {
+  return patchTask(taskId, task.version, {
+    status: task.status || "",
+    ...(task.completionSummary
+      ? { completionSummary: task.completionSummary }
+      : {}),
   });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error);
-  }
-
-  const data = await response.json();
-
-  return data;
 }
-
-export default updateTaskStatus;

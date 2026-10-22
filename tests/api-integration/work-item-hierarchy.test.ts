@@ -69,18 +69,26 @@ describe("API integration: typed work item hierarchy", () => {
     const list = (await listResponse.json()) as {
       data: { columns: Array<{ tasks: Array<{ id: string }> }> };
     };
-    expect(list.data.columns.flatMap((column) => column.tasks).map((task) => task.id)).toEqual(
-      expect.arrayContaining([epic.id, secondEpic.id]),
-    );
-    expect(list.data.columns.flatMap((column) => column.tasks).map((task) => task.id)).not.toContain(
-      subEpic.id,
-    );
+    expect(
+      list.data.columns
+        .flatMap((column) => column.tasks)
+        .map((task) => task.id),
+    ).toEqual(expect.arrayContaining([epic.id, secondEpic.id]));
+    expect(
+      list.data.columns
+        .flatMap((column) => column.tasks)
+        .map((task) => task.id),
+    ).not.toContain(subEpic.id);
 
     const createRelation = (sourceTaskId: string, targetTaskId: string) =>
       app.request("/api/task-relation", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sourceTaskId, targetTaskId, relationType: "subtask" }),
+        body: JSON.stringify({
+          sourceTaskId,
+          targetTaskId,
+          relationType: "subtask",
+        }),
       });
 
     expect((await createRelation(epic.id, subEpic.id)).status).toBe(200);
@@ -98,6 +106,7 @@ describe("API integration: typed work item hierarchy", () => {
         status: "to-do",
         projectId: project.id,
         position: subEpic.position,
+        expectedVersion: subEpic.version,
         workItemType: "epic",
       }),
     });

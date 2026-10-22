@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LabelCataloguePager } from "@/components/common/label-catalogue-pager";
 import TaskDescriptionEditor from "@/components/task/task-description-editor";
 import { TaskHorizonsSelect } from "@/components/task/task-horizons-select";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -49,7 +50,8 @@ import useCreateLabel from "@/hooks/mutations/label/use-create-label";
 import useCreateTask from "@/hooks/mutations/task/use-create-task";
 import { useDeleteTask } from "@/hooks/mutations/task/use-delete-task";
 import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
-import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
+import useGetLabelCatalogue from "@/hooks/queries/label/use-get-label-catalogue";
+import useLabelCatalogueSearch from "@/hooks/queries/label/use-label-catalogue-search";
 import useGetProjects from "@/hooks/queries/project/use-get-projects";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
@@ -89,9 +91,6 @@ type Label = {
   id: string;
   name: string;
   color: string;
-  taskId: string | null;
-  workspaceId: string;
-  createdAt: string;
 };
 
 type PopoverStep = "select" | "color";
@@ -189,9 +188,6 @@ function CreateTaskModal({
     workspace?.id || "",
   );
   const { mutateAsync: createLabel } = useCreateLabel();
-  const { data: workspaceLabels = [] } = useGetLabelsByWorkspace(
-    workspace?.id || "",
-  );
   const { canCreateTasks, canManageLabels } = useWorkspacePermission();
   const canCreateTaskCapability = canCreateTasks();
   const canCreateLabelCapability = canManageLabels();
@@ -232,7 +228,20 @@ function CreateTaskModal({
 
   const [labelsOpen, setLabelsOpen] = useState(false);
   const [labelsStep, setLabelsStep] = useState<PopoverStep>("select");
-  const [searchValue, setSearchValue] = useState("");
+  const labelSearch = useLabelCatalogueSearch(
+    workspace?.id ?? "",
+    open && labelsOpen && canCreateTaskCapability,
+  );
+  const { input: searchValue, setInput: setSearchValue } = labelSearch;
+  const workspaceLabels = labelSearch.catalogue.data?.items ?? [];
+  const exactName = useGetLabelCatalogue(
+    workspace?.id ?? "",
+    { search: labelSearch.search, exact: true, limit: 1 },
+    open &&
+      labelsOpen &&
+      Boolean(labelSearch.search) &&
+      searchValue.trim() === labelSearch.search,
+  );
   const [selectedColor, setSelectedColor] = useState<LabelColor>("gray");
   const [newLabelName, setNewLabelName] = useState("");
 
@@ -265,7 +274,7 @@ function CreateTaskModal({
     const labelMap = new Map<string, (typeof workspaceLabels)[0]>();
     for (const label of searchFiltered) {
       const existing = labelMap.get(label.name);
-      if (!existing || (label.taskId === null && existing.taskId !== null)) {
+      if (!existing || (label.isWorkspaceLabel && !existing.isWorkspaceLabel)) {
         labelMap.set(label.name, label);
       }
     }
@@ -274,10 +283,11 @@ function CreateTaskModal({
   })();
 
   const isCreatingNewLabel =
-    searchValue &&
-    !workspaceLabels.some(
-      (label) => label.name.toLowerCase() === searchValue.toLowerCase(),
-    );
+    Boolean(searchValue.trim()) &&
+    searchValue.trim() === labelSearch.search &&
+    !exactName.isPending &&
+    !exactName.error &&
+    exactName.data?.pagination.total === 0;
 
   const handleClose = () => {
     const shouldDeleteDraft = draftTask && !didSubmitRef.current;
@@ -294,6 +304,8 @@ function CreateTaskModal({
     setCreateMore(false);
     setLabels([]);
     setLabelsStep("select");
+    setLabelsOpen(false);
+    labelSearch.setPage(1);
     setSearchValue("");
     setSelectedColor("gray");
     setNewLabelName("");
@@ -303,7 +315,7 @@ function CreateTaskModal({
     onClose();
 
     if (shouldDeleteDraft) {
-      void deleteTask(draftTask.id).catch(() => {
+      void deleteTask(draftTask).catch(() => {
         // ignore cleanup failures for abandoned empty drafts
       });
     }
@@ -501,6 +513,7 @@ function CreateTaskModal({
         setLabels([]);
         setLabelsStep("select");
         setSearchValue("");
+        labelSearch.setPage(1);
         setSelectedColor("gray");
         setNewLabelName("");
         draftCreationPromiseRef.current = null;
@@ -574,6 +587,7 @@ function CreateTaskModal({
 
   const resetLabelsPopover = () => {
     setLabelsStep("select");
+    labelSearch.setPage(1);
     setSearchValue("");
     setNewLabelName("");
     setSelectedColor("gray");
@@ -584,29 +598,24 @@ function CreateTaskModal({
     setTimeout(resetLabelsPopover, 200);
   };
 
-  const toggleLabel = (labelName: string) => {
-    const existingLabel = labels.find((l) => l.name === labelName);
+  const toggleLabel = (workspaceLabel: Label) => {
+    const existingLabel = labels.find((l) => l.name === workspaceLabel.name);
     if (existingLabel) {
-      setLabels(labels.filter((l) => l.name !== labelName));
+      setLabels(labels.filter((l) => l.name !== workspaceLabel.name));
     } else {
-      const workspaceLabel = workspaceLabels.find((l) => l.name === labelName);
-      if (workspaceLabel) {
-        setLabels([
-          ...labels,
-          {
-            id: workspaceLabel.id,
-            name: workspaceLabel.name,
-            color: workspaceLabel.color,
-            taskId: null,
-            workspaceId: workspaceLabel.workspaceId || "",
-            createdAt: workspaceLabel.createdAt,
-          },
-        ]);
-      }
+      setLabels([
+        ...labels,
+        {
+          id: workspaceLabel.id,
+          name: workspaceLabel.name,
+          color: workspaceLabel.color,
+        },
+      ]);
     }
   };
 
   const handleCreateNewClick = () => {
+    if (!isCreatingNewLabel) return;
     setNewLabelName(searchValue);
     setLabelsStep("color");
   };
@@ -627,12 +636,12 @@ function CreateTaskModal({
         id: createdLabel.id,
         name: createdLabel.name,
         color: createdLabel.color,
-        taskId: createdLabel.taskId ?? null,
-        workspaceId: createdLabel.workspaceId ?? workspace.id,
-        createdAt: createdLabel.createdAt,
       };
 
-      setLabels([...labels, newLabel]);
+      setLabels((previous) => [
+        ...previous.filter((label) => label.name !== newLabel.name),
+        newLabel,
+      ]);
       toast.success(t("common:modals.createTask.labelCreated"));
       handleLabelsClose();
     } catch (error) {
@@ -1048,6 +1057,10 @@ function CreateTaskModal({
                       <div className="flex items-center gap-2 p-2 border-b border-border">
                         <Search className="w-3 h-3 text-muted-foreground" />
                         <input
+                          type="search"
+                          aria-label={t("common:searchLabels", {
+                            defaultValue: "Search labels",
+                          })}
                           ref={searchInputRef}
                           value={searchValue}
                           onChange={(e) => setSearchValue(e.target.value)}
@@ -1059,7 +1072,29 @@ function CreateTaskModal({
                       </div>
 
                       <div className="py-1">
-                        {filteredLabels.length === 0 &&
+                        {labelSearch.catalogue.error && (
+                          <div role="alert" className="px-2 text-xs">
+                            <p>{labelSearch.catalogue.error.message}</p>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                void labelSearch.catalogue.refetch()
+                              }
+                            >
+                              {t("common:retry", { defaultValue: "Retry" })}
+                            </Button>
+                          </div>
+                        )}
+                        {labelSearch.busy && (
+                          <p role="status" className="px-2 text-xs">
+                            {t("common:loading", { defaultValue: "Loading…" })}
+                          </p>
+                        )}
+                        {!labelSearch.busy &&
+                          !labelSearch.catalogue.error &&
+                          filteredLabels.length === 0 &&
                           searchValue.length === 0 && (
                             <span className="text-xs text-muted-foreground px-2">
                               {t("common:modals.createTask.noLabelsFound")}
@@ -1070,7 +1105,8 @@ function CreateTaskModal({
                             key={label.id}
                             type="button"
                             className="w-full flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-accent/50 text-left"
-                            onClick={() => toggleLabel(label.name)}
+                            disabled={labelSearch.busy}
+                            onClick={() => toggleLabel(label)}
                           >
                             <div className="flex-shrink-0 w-3 flex justify-center">
                               {labels.some((l) => l.name === label.name) && (
@@ -1091,6 +1127,24 @@ function CreateTaskModal({
                             </span>
                           </button>
                         ))}
+                        <LabelCataloguePager
+                          pagination={labelSearch.catalogue.data?.pagination}
+                          busy={labelSearch.busy}
+                          onPage={labelSearch.setPage}
+                        />
+                        {exactName.error && (
+                          <div role="alert" className="px-2 text-xs">
+                            <p>{exactName.error.message}</p>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void exactName.refetch()}
+                            >
+                              {t("common:retry", { defaultValue: "Retry" })}
+                            </Button>
+                          </div>
+                        )}
 
                         {canCreateLabelCapability &&
                           isCreatingNewLabel &&

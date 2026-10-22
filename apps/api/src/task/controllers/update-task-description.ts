@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskTable, userTable } from "../../database/schema";
@@ -6,7 +6,7 @@ import { publishEvent } from "../../events";
 import createNotification from "../../notification/controllers/create-notification";
 import { deleteOrphanedAssets } from "../../storage/cleanup-assets";
 import { parseMentionIds } from "../../utils/parse-mentions";
-import { assertTaskMutationAllowed } from "../task-workflow-policy";
+import assertFieldMutationPolicy from "./assert-field-mutation-policy";
 
 async function updateTaskDescription({
   id,
@@ -29,17 +29,19 @@ async function updateTaskDescription({
     });
   }
 
-  assertTaskMutationAllowed({ caller, existing: existingTask });
+  await assertFieldMutationPolicy(existingTask, caller);
 
   const [updatedTask] = await db
     .update(taskTable)
     .set({ description })
-    .where(eq(taskTable.id, id))
+    .where(
+      and(eq(taskTable.id, id), eq(taskTable.version, existingTask.version)),
+    )
     .returning();
 
   if (!updatedTask) {
-    throw new HTTPException(500, {
-      message: "Failed to update task description",
+    throw new HTTPException(409, {
+      message: "Task changed during validation; reload before retrying",
     });
   }
 

@@ -374,6 +374,8 @@ export const taskTable = pgTable(
       onUpdate: "cascade",
     }),
     title: text("title").notNull(),
+    managedKey: text("managed_key"),
+    version: integer("version").notNull().default(1),
     description: text("description"),
     goal: text("goal"),
     acceptanceCriteria: text("acceptance_criteria"),
@@ -412,6 +414,10 @@ export const taskTable = pgTable(
     index("task_workItemType_idx").on(table.workItemType),
     index("task_taskCategory_idx").on(table.taskCategory),
     unique("task_project_number_unique").on(table.projectId, table.number),
+    unique("task_project_managed_key_unique").on(
+      table.projectId,
+      table.managedKey,
+    ),
   ],
 );
 
@@ -481,6 +487,7 @@ export const activityTable = pgTable(
     id: text("id")
       .$defaultFn(() => createId())
       .primaryKey(),
+    operationKey: text("operation_key").unique(),
     taskId: text("task_id")
       .notNull()
       .references(() => taskTable.id, {
@@ -514,6 +521,65 @@ export const activityTable = pgTable(
     ),
   ],
 );
+
+export const taskOperationTable = pgTable(
+  "task_operation",
+  {
+    id: text("id").primaryKey(),
+    taskId: text("task_id")
+      .notNull()
+      .references(() => taskTable.id, { onDelete: "cascade" }),
+    bodyHash: text("body_hash").notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [index("task_operation_task_id_idx").on(table.taskId)],
+);
+
+export const projectTaskOperationTable = pgTable(
+  "project_task_operation",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projectTable.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").notNull(),
+    userId: text("user_id").notNull(),
+    bodyHash: text("body_hash").notNull(),
+    intent: jsonb("intent").$type<Record<string, string>>().notNull(),
+    snapshot: jsonb("snapshot")
+      .$type<{ id: string; version: number }[]>()
+      .notNull(),
+    result: jsonb("result").$type<Record<string, unknown>>().notNull(),
+    createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
+    appliedAt: timestamp("applied_at", { mode: "date" }),
+  },
+  (table) => [
+    index("project_task_operation_project_id_idx").on(table.projectId),
+  ],
+);
+
+export const taskGroupEventTable = pgTable("task_group_event", {
+  id: text("id").primaryKey(),
+  operationId: text("operation_id")
+    .notNull()
+    .references(() => projectTaskOperationTable.id, { onDelete: "cascade" }),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at", {
+    mode: "date",
+    withTimezone: true,
+  })
+    .notNull()
+    .defaultNow(),
+  leaseToken: text("lease_token"),
+  leaseUntil: timestamp("lease_until", { mode: "date", withTimezone: true }),
+  deliveredAt: timestamp("delivered_at", { mode: "date", withTimezone: true }),
+  createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 export const assetTable = pgTable(
   "asset",
@@ -597,6 +663,7 @@ export const labelTable = pgTable(
 export const notificationTable = pgTable(
   "notification",
   {
+    operationKey: text("operation_key").unique(),
     id: text("id")
       .$defaultFn(() => createId())
       .primaryKey(),
@@ -923,6 +990,11 @@ export const taskRelationTable = pgTable(
     index("task_relation_type_target_idx").on(
       table.relationType,
       table.targetTaskId,
+    ),
+    uniqueIndex("task_relation_pair_unique").on(
+      table.relationType,
+      sql`least(${table.sourceTaskId}, ${table.targetTaskId})`,
+      sql`greatest(${table.sourceTaskId}, ${table.targetTaskId})`,
     ),
   ],
 );

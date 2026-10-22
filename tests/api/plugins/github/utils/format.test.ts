@@ -34,4 +34,33 @@ describe("github format helpers", () => {
     expect(getLabelsForIssue("no-priority", "done")).toEqual(["status:done"]);
     expect(getLabelsForIssue(null, "planned")).toEqual(["status:planned"]);
   });
+  it.each(["Body", "Line1\nLine2", "Body\n\n", null])(
+    "removes matching generated task footer from %s",
+    (description) => {
+      expect(
+        formatTaskDescriptionFromIssue(
+          formatIssueBody(description, "task_123"),
+          "task_123",
+        ),
+      ).toBe(description ?? "");
+    },
+  );
+  it("removes matching footer with CRLF delimiter while preserving body line endings", () => {
+    const body = "Line1\r\nLine2\r\n\r\n---\r\n<sub>Task: task_123</sub>";
+    expect(formatTaskDescriptionFromIssue(body, "task_123")).toBe(
+      "Line1\r\nLine2",
+    );
+  });
+  it.each([
+    "Body\n\n---\n<sub>Task: another_task</sub>",
+    "Body <sub>Task: task_123</sub>",
+    "Body\n\n---\n<sub>Task: task_123</sub>\nMore text",
+    "Body\n\n---\n<sub>Task: task_123</sub>\n",
+  ])("preserves user or nonmatching footer text %s", (body) => {
+    expect(formatTaskDescriptionFromIssue(body, "task_123")).toBe(body);
+  });
+  it("preserves generated footer when linked task identity is unavailable", () => {
+    const body = formatIssueBody("Body", "task_123");
+    expect(formatTaskDescriptionFromIssue(body)).toBe(body);
+  });
 });

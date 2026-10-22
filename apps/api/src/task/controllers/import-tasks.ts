@@ -71,18 +71,17 @@ async function importTasks(
         unblockPolicy: taskData.unblockPolicy,
         completionSummary: taskData.completionSummary,
       });
-      assertTaskWorkflowPolicy({
-        isAiCaller: isAiTaskCaller(caller),
-        nextStatus: status,
-        isFinalStatus: status === "done",
-        fields: workflowFields,
-      });
-
       const column = await db.query.columnTable.findFirst({
         where: and(
           eq(columnTable.projectId, projectId),
           eq(columnTable.slug, status),
         ),
+      });
+      assertTaskWorkflowPolicy({
+        isAiCaller: isAiTaskCaller(caller),
+        nextStatus: status,
+        isFinalStatus: status === "done" || column?.isFinal === true,
+        fields: workflowFields,
       });
 
       const createdTask = await db.transaction(async (tx) => {

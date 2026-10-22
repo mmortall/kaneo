@@ -40,14 +40,16 @@ import {
 } from "@/components/ui/context-menu";
 import useCreateTaskRelation from "@/hooks/mutations/task-relation/use-create-task-relation";
 import useDeleteTaskRelation from "@/hooks/mutations/task-relation/use-delete-task-relation";
+import { useGetColumns } from "@/hooks/queries/column/use-get-columns";
 import useGetProject from "@/hooks/queries/project/use-get-project";
-import { useGetTasks } from "@/hooks/queries/task/use-get-tasks";
+import { useGetTaskView } from "@/hooks/queries/task/use-get-task-view";
 import useGetTaskRelations from "@/hooks/queries/task-relation/use-get-task-relations";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { getColumnIcon } from "@/lib/column";
 import { getInitials } from "@/lib/get-initials";
+import { taskFromRelation } from "@/lib/task-from-relation";
 import { toast } from "@/lib/toast";
 import type Task from "@/types/task";
 import SubtaskAssigneePopover from "./subtask-assignee-popover";
@@ -82,18 +84,30 @@ export default function TaskRelations({
   const [isOpen, setIsOpen] = useState(true);
   const [commandOpen, setCommandOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
   const [selectedRelationType, setSelectedRelationType] = useState<
     "blocks" | "related"
   >("related");
 
   const { data: relations = [] } = useGetTaskRelations(taskId);
-  const { data: projectData } = useGetTasks(projectId);
+  const { data: columns } = useGetColumns(projectId);
+  const candidateResult = useGetTaskView(commandOpen ? projectId : "", {
+    page,
+    filters: { text: search },
+  });
+  const projectData = candidateResult.data?.data;
+  const pagination = candidateResult.data?.pagination;
   const { data: project } = useGetProject({ id: projectId, workspaceId });
   const { data: workspace } = useActiveWorkspace();
   const { data: workspaceUsers } = useGetActiveWorkspaceUsers(
     workspace?.id ?? "",
   );
   const createRelation = useCreateTaskRelation();
+  const busy =
+    candidateResult.isFetching ||
+    searchQuery !== search ||
+    createRelation.isPending;
   const deleteRelation = useDeleteTaskRelation(taskId);
   const { canManageTasks } = useWorkspacePermission();
   const canEdit = canManageTasks();
@@ -101,8 +115,24 @@ export default function TaskRelations({
   useEffect(() => {
     if (!commandOpen) {
       setSearchQuery("");
+      setSearch("");
+      setPage(1);
     }
   }, [commandOpen]);
+  useEffect(() => {
+    if (searchQuery === search) return;
+    const timer = setTimeout(() => {
+      setSearch(searchQuery);
+      setPage(1);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery, search]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependency list kept as deployed; it intentionally re-runs or resets on these values
+  useEffect(() => {
+    setSearchQuery("");
+    setSearch("");
+    setPage(1);
+  }, [projectId, taskId]);
 
   const nonSubtaskRelations = relations.filter(
     (rel) => rel.relationType !== "subtask",
@@ -149,48 +179,27 @@ export default function TaskRelations({
 
   const allTasks = useMemo(() => {
     if (!projectData) return [];
-    const tasks: TaskItem[] = [];
-
-    if ("columns" in projectData && Array.isArray(projectData.columns)) {
-      for (const col of projectData.columns as Array<{
-        tasks: TaskItem[];
-      }>) {
-        if (col.tasks) {
-          for (const t of col.tasks) {
-            tasks.push(t);
-          }
-        }
-      }
-    }
-
-    return tasks;
+    return [
+      ...projectData.columns.flatMap((column) => column.tasks),
+      ...projectData.plannedTasks,
+      ...projectData.blockedTasks,
+      ...projectData.archivedTasks,
+    ];
   }, [projectData]);
 
   const finalStatusSlugs = useMemo(() => {
-    if (!projectData) return new Set<string>();
-    if ("columns" in projectData && Array.isArray(projectData.columns)) {
-      return new Set(
-        (projectData.columns as Array<{ id: string; isFinal?: boolean }>)
-          .filter((col) => col.isFinal)
-          .map((col) => col.id),
-      );
-    }
-    return new Set<string>();
-  }, [projectData]);
+    return new Set(
+      (columns ?? [])
+        .filter((column) => column.isFinal)
+        .map((column) => column.slug),
+    );
+  }, [columns]);
 
   const columnIconBySlug = useMemo(() => {
     const icons = new Map<string, string | null | undefined>();
-    if (!projectData) return icons;
-    if ("columns" in projectData && Array.isArray(projectData.columns)) {
-      for (const col of projectData.columns as Array<{
-        id: string;
-        icon?: string | null;
-      }>) {
-        icons.set(col.id, col.icon);
-      }
-    }
+    for (const column of columns ?? []) icons.set(column.slug, column.icon);
     return icons;
-  }, [projectData]);
+  }, [columns]);
 
   const filteredTasks = allTasks.filter(
     (t) => !existingRelatedTaskIds.has(t.id),
@@ -238,24 +247,7 @@ export default function TaskRelations({
 
   const buildTaskObject = (item: {
     task: NonNullable<(typeof nonSubtaskRelations)[number]["sourceTask"]>;
-  }): Task => ({
-    id: item.task.id,
-    title: item.task.title,
-    number: item.task.number,
-    description: null,
-    status: item.task.status,
-    priority: item.task.priority,
-    startDate: null,
-    dueDate: null,
-    position: null,
-    createdAt: "",
-    updatedAt: "",
-    userId: item.task.userId,
-    assigneeId: item.task.userId,
-    assigneeName: item.task.assigneeName,
-    assigneeImage: "",
-    projectId: item.task.projectId,
-  });
+  }): Task => taskFromRelation(item.task);
 
   const totalCount = nonSubtaskRelations.length;
 
@@ -288,6 +280,7 @@ export default function TaskRelations({
               variant="ghost"
               size="xs"
               className="text-muted-foreground"
+              aria-label={t("tasks:relations.searchPlaceholder")}
               onClick={() => setCommandOpen(true)}
             >
               <Plus className="size-3.5" />
@@ -408,18 +401,25 @@ export default function TaskRelations({
 
       <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
         <CommandDialogPopup>
-          <Command items={commandGroups}>
+          <Command
+            items={commandGroups}
+            mode="none"
+            value={searchQuery}
+            onValueChange={setSearchQuery}
+            itemToStringValue={(item) => (item as TaskItem).title}
+          >
             <CommandInput
               placeholder={t("tasks:relations.searchPlaceholder")}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              maxLength={512}
             />
             <CommandPanel>
               <CommandEmpty>
                 <div className="text-center py-6">
                   <Search className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">
-                    {t("tasks:relations.noTasksFound")}
+                    {busy
+                      ? t("common:empty.loading")
+                      : t("tasks:relations.noTasksFound")}
                   </p>
                 </div>
               </CommandEmpty>
@@ -432,7 +432,8 @@ export default function TaskRelations({
                         {(item: TaskItem) => (
                           <CommandItem
                             key={item.id}
-                            value={`${project?.slug}-${item.number} ${item.title}`}
+                            disabled={busy}
+                            value={item}
                             onClick={() => handleLinkTask(item.id)}
                             className="flex items-center gap-3 py-2"
                           >
@@ -458,6 +459,47 @@ export default function TaskRelations({
                 )}
               </CommandList>
             </CommandPanel>
+            {candidateResult.error && (
+              <div className="p-2 text-sm text-destructive" role="alert">
+                {candidateResult.error.message}
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => void candidateResult.refetch()}
+                >
+                  {t("common:actions.retry")}
+                </Button>
+              </div>
+            )}
+            <nav
+              aria-label={t("common:pagination.label")}
+              className="flex items-center justify-between border-t p-2"
+            >
+              <Button
+                size="xs"
+                variant="ghost"
+                aria-label={t("common:pagination.previousPage")}
+                disabled={busy || page === 1}
+                onClick={() => setPage((value) => value - 1)}
+              >
+                {t("common:pagination.previous")}
+              </Button>
+              <span
+                className="text-xs text-muted-foreground"
+                aria-live="polite"
+              >
+                {page} / {pagination?.totalPages ?? 1}
+              </span>
+              <Button
+                size="xs"
+                variant="ghost"
+                aria-label={t("common:pagination.nextPage")}
+                disabled={busy || !pagination?.hasMore}
+                onClick={() => setPage((value) => value + 1)}
+              >
+                {t("common:pagination.next")}
+              </Button>
+            </nav>
             <CommandFooter>
               <div className="flex items-center gap-3">
                 <button

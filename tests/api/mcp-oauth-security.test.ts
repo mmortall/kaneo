@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
+import { verifyApiKey } from "../../apps/api/src/utils/verify-api-key";
 
 const mocks = vi.hoisted(() => {
   const insertedSessions: Array<Record<string, unknown>> = [];
@@ -24,6 +25,9 @@ const mocks = vi.hoisted(() => {
 
 vi.mock("../../apps/api/src/auth", () => ({
   auth: { api: { getSession: mocks.getSession } },
+}));
+vi.mock("../../apps/api/src/utils/verify-api-key", () => ({
+  verifyApiKey: vi.fn(async () => null),
 }));
 
 vi.mock("../../apps/api/src/database", () => ({
@@ -203,7 +207,9 @@ describe("MCP OAuth security", () => {
     expect(authorize.status).toBe(302);
     const consentUrl = new URL(authorize.headers.get("location") ?? "");
     expect(consentUrl.origin).toBe(clientOrigin);
-    expect(consentUrl.pathname).toBe("/mcp/authorize");
+    expect(consentUrl.pathname).toBe(
+      `${new URL(clientUrl).pathname.replace(/\/+$/, "")}/mcp/authorize`,
+    );
     expect(consentUrl.searchParams.has("code")).toBe(false);
     expect(mocks.getSession).not.toHaveBeenCalled();
 
@@ -329,6 +335,45 @@ describe("MCP OAuth security", () => {
 
     expect((await redeem("incorrect-verifier")).status).toBe(400);
     expect((await redeem(verifier)).status).toBe(400);
+  });
+
+  it("accepts valid API key and prevents another key reusing its MCP session", async () => {
+    vi.mocked(verifyApiKey).mockResolvedValueOnce({
+      valid: true,
+      key: { id: "key-a", userId: "same-user" },
+    } as never);
+    const headers = {
+      authorization: "Bearer static-key",
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    };
+    const response = await mcpRoutes.request("/mcp", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "test", version: "1" },
+        },
+      }),
+    });
+    expect(response.status).toBe(200);
+    const sessionId = response.headers.get("mcp-session-id");
+    expect(sessionId).toBeTruthy();
+    vi.mocked(verifyApiKey).mockResolvedValueOnce({
+      valid: true,
+      key: { id: "key-b", userId: "same-user" },
+    } as never);
+    const denied = await mcpRoutes.request("/mcp", {
+      method: "POST",
+      headers: { ...headers, "mcp-session-id": sessionId! },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" }),
+    });
+    expect(denied.status).toBe(404);
   });
 
   it("sweeps expired authorization requests when creating a new one", async () => {

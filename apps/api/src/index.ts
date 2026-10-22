@@ -24,11 +24,17 @@ import billing from "./billing";
 import column from "./column";
 import comment from "./comment";
 import config from "./config";
-import db, { getDatabase, schema } from "./database";
+import db, { getDatabase, getDatabasePool, schema } from "./database";
+import { managedKeyConflict } from "./database/managed-key-conflict";
 import { prepareDatabaseStartup } from "./database/prepare-database-startup";
 import { waitForDatabase } from "./database/wait-for-database";
 import discordIntegration from "./discord-integration";
-import { eventContext } from "./events";
+import { eventBusSnapshot, eventContext } from "./events";
+import { taskGroupQueueSnapshot } from "./events/task-group-metrics";
+import {
+  startTaskGroupEventWorker,
+  stopTaskGroupEventWorker,
+} from "./events/task-group-worker";
 import externalLink from "./external-link";
 import genericWebhookIntegration from "./generic-webhook-integration";
 import giteaIntegration, { handleGiteaWebhookRoute } from "./gitea-integration";
@@ -43,6 +49,7 @@ import { migrateColumns } from "./migrations/column-migration";
 import notification from "./notification";
 import notificationPreferences from "./notification-preferences";
 import oauth from "./oauth";
+import { measureRequest, performanceSnapshot } from "./performance";
 import { initializePlugins } from "./plugins";
 import { migrateGitHubIntegration } from "./plugins/github/migration";
 import project from "./project";
@@ -150,8 +157,19 @@ function buildContentDisposition(filename: string, inline: boolean) {
 
 export function createApp() {
   const app = new Hono<AppVariables>();
+  app.use("*", measureRequest);
 
   app.onError((err, c) => {
+    if (managedKeyConflict(err)) {
+      return c.json(
+        {
+          error: "MANAGED_KEY_CONFLICT",
+          message:
+            "Managed identity already exists or disagrees with marker; reload and reconcile.",
+        },
+        409,
+      );
+    }
     if (err instanceof HTTPException) {
       // expected errors (401/404/...) are not reported; real failures are
       if (err.status >= 500) {
@@ -206,6 +224,26 @@ export function createApp() {
 
   api.get("/health", (c) => {
     return c.json({ status: "ok" });
+  });
+  api.get("/ready", async (c) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const query = { text: "SELECT 1", query_timeout: 1500 };
+      await Promise.race([
+        getDatabasePool().query(query),
+        new Promise((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Readiness deadline")),
+            2000,
+          );
+        }),
+      ]);
+      return c.json({ status: "ready" });
+    } catch {
+      return c.json({ status: "unavailable" }, 503);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   });
 
   api.get(
@@ -550,6 +588,19 @@ export function createApp() {
     return eventContext.run({ initiatorId }, next);
   });
 
+  api.get("/diagnostics", (c) => {
+    const pool = getDatabasePool();
+    return c.json({
+      ...performanceSnapshot(),
+      events: { ...eventBusSnapshot(), taskGroups: taskGroupQueueSnapshot() },
+      database: {
+        total: pool.totalCount,
+        idle: pool.idleCount,
+        waiting: pool.waitingCount,
+      },
+    });
+  });
+
   const oauthApi = api.route("/oauth", oauth);
 
   const billingApi = api.route("/billing", billing);
@@ -792,6 +843,7 @@ export async function runStartupTasks() {
   initializePlugins();
   initializeScheduler();
   await initializeWebSocketAdapter();
+  startTaskGroupEventWorker();
 }
 
 export async function startServer(
@@ -827,6 +879,7 @@ export async function startServer(
 
     console.log("🛑 Shutting down gracefully...");
     shutdownScheduler();
+    stopTaskGroupEventWorker();
     await shutdownWebSocketAdapter();
     server.close();
     process.exit(0);

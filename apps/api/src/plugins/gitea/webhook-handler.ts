@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { integrationTable } from "../../database/schema";
 import type { GiteaConfig } from "./config";
@@ -28,6 +29,11 @@ type GiteaIssueCommentPayload = Parameters<
   typeof handleGiteaIssueCommentCreated
 >[0];
 type GiteaLabelPayload = Parameters<typeof handleGiteaLabelCreated>[0];
+
+type WebhookResult =
+  | { success: true }
+  | { success: false; error: string; status: 400 | 401 | 404 | 500 }
+  | { success: false; response: Response };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -76,42 +82,58 @@ export async function handleGiteaWebhookRequest(
   rawBody: string,
   signatureHeader: string | undefined,
   eventHeader: string | undefined,
-): Promise<{ success: boolean; error?: string }> {
+): Promise<WebhookResult> {
   const integration = await db.query.integrationTable.findFirst({
     where: eq(integrationTable.id, integrationId),
   });
 
   if (!integration || integration.type !== "gitea") {
-    return { success: false, error: "Gitea integration not found" };
+    return {
+      success: false,
+      error: "Gitea integration not found",
+      status: 404,
+    };
   }
 
   let config: GiteaConfig;
   try {
     config = JSON.parse(integration.config) as GiteaConfig;
   } catch {
-    return { success: false, error: "Invalid integration config" };
+    return { success: false, error: "Invalid integration config", status: 500 };
   }
 
   const secret = config.webhookSecret;
   if (!secret) {
-    return { success: false, error: "Webhook secret not configured" };
+    return {
+      success: false,
+      error: "Webhook secret not configured",
+      status: 500,
+    };
   }
 
   if (!verifyGiteaSignature(rawBody, secret, signatureHeader)) {
-    return { success: false, error: "Invalid webhook signature" };
+    return { success: false, error: "Invalid webhook signature", status: 401 };
   }
 
   const event = eventHeader || undefined;
 
   if (!event) {
-    return { success: false, error: "Missing event name" };
+    return { success: false, error: "Missing event name", status: 400 };
   }
 
   let payload: Record<string, unknown>;
   try {
-    payload = JSON.parse(rawBody) as Record<string, unknown>;
+    const parsed: unknown = JSON.parse(rawBody);
+    if (!isRecord(parsed) || Array.isArray(parsed)) {
+      return {
+        success: false,
+        error: "Webhook payload must be an object",
+        status: 400,
+      };
+    }
+    payload = parsed;
   } catch {
-    return { success: false, error: "Invalid JSON payload" };
+    return { success: false, error: "Invalid JSON payload", status: 400 };
   }
 
   try {
@@ -119,9 +141,13 @@ export async function handleGiteaWebhookRequest(
     return { success: true };
   } catch (error) {
     console.error("[Gitea Webhook] Handler error:", error);
+    if (error instanceof HTTPException) {
+      return { success: false, response: error.getResponse() };
+    }
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Webhook handler failed",
+      error: "Webhook handler failed",
+      status: 500,
     };
   }
 }

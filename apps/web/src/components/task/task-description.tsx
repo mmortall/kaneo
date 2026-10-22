@@ -54,11 +54,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/menu";
+import { TaskConflictError } from "@/fetchers/task/update-task";
 import { useUpdateTaskDescription } from "@/hooks/mutations/task/use-update-task-description";
 import useGetTask from "@/hooks/queries/task/use-get-task";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { cn } from "@/lib/cn";
-import debounce from "@/lib/debounce";
 import { parseTaskListMarkdownToNodes } from "@/lib/editor-task-list-paste";
 import {
   extractIssueKeyFromUrl,
@@ -67,6 +67,7 @@ import {
   normalizeUrl,
 } from "@/lib/editor-url-utils";
 import { getSharedShikiHighlighter } from "@/lib/shiki-highlighter";
+import { createTaskDescriptionSave } from "@/lib/task-description-save";
 import { toast } from "@/lib/toast";
 import { uploadTaskImage } from "@/lib/upload-task-image";
 import { AttachmentCard } from "./extensions/attachment-card";
@@ -270,7 +271,6 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
   const editorShellRef = useRef<HTMLDivElement | null>(null);
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const dragDepthRef = useRef(0);
-  const taskRef = useRef(task);
   const updateTaskRef = useRef(updateTaskDescription);
   const activeTaskIdRef = useRef<string | null>(null);
   const lastEditorRef = useRef<Editor | null>(null);
@@ -303,8 +303,8 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
   } | null>(null);
   const slashMenuRef = useRef<SlashMenuState | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependency list kept as deployed; it intentionally re-runs or resets on these values
   useEffect(() => {
-    taskRef.current = task;
     updateTaskRef.current = updateTaskDescription;
   }, [task, updateTaskDescription]);
 
@@ -526,22 +526,29 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     };
   }, []);
 
-  const debouncedUpdate = useCallback(
-    debounce(async (markdown: string) => {
-      const currentTask = taskRef.current;
-      const updateTaskFn = updateTaskRef.current;
-      if (!currentTask || !updateTaskFn) return;
-
-      try {
-        await updateTaskFn({
-          ...currentTask,
-          description: markdown,
-        });
-      } catch (error) {
-        console.error("Failed to update description:", error);
-      }
-    }, 700),
+  const descriptionSave = useMemo(
+    () =>
+      createTaskDescriptionSave(
+        (snapshot) => updateTaskRef.current(snapshot),
+        (error) => {
+          console.error("Failed to update description:", error);
+          if (!(error instanceof TaskConflictError)) {
+            toast.error(
+              "Description was not saved. Your draft remains in editor; reload before retrying.",
+            );
+          }
+        },
+      ),
     [],
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependency list kept as deployed; it intentionally re-runs or resets on these values
+  useEffect(
+    () => () => {
+      descriptionSave.cancel();
+      hasHydratedRef.current = false;
+    },
+    [descriptionSave, taskId],
   );
 
   const editor = useEditor(
@@ -754,7 +761,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
         const markdown = formatMarkdown(activeEditor.getMarkdown());
         if (markdown === latestSyncedMarkdownRef.current) return;
         latestSyncedMarkdownRef.current = markdown;
-        debouncedUpdate(markdown);
+        descriptionSave.schedule(markdown);
       },
     },
     [getOverlayPosition, handleAssetFileUpload, t, toShikiLanguage],
@@ -956,7 +963,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
   );
 
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || !task || task.id !== taskId) return;
     if (lastEditorRef.current !== editor) {
       hasHydratedRef.current = false;
       lastEditorRef.current = editor;
@@ -973,6 +980,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     if (!hasHydratedRef.current) {
       isSyncingExternalContentRef.current = true;
       latestSyncedMarkdownRef.current = incomingMarkdown;
+      descriptionSave.hydrate(task);
       editor.commands.setContent(incomingMarkdown, {
         emitUpdate: false,
         contentType: "markdown",
@@ -985,6 +993,8 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     }
 
     if (editor.isFocused) return;
+    if (!descriptionSave.canHydrate(task)) return;
+    descriptionSave.hydrate(task);
     if (incomingMarkdown === latestSyncedMarkdownRef.current) return;
 
     isSyncingExternalContentRef.current = true;
@@ -996,7 +1006,7 @@ export default function TaskDescription({ taskId }: TaskDescriptionProps) {
     requestAnimationFrame(() => {
       isSyncingExternalContentRef.current = false;
     });
-  }, [editor, taskId, task?.description]);
+  }, [editor, taskId, task, descriptionSave]);
 
   useEffect(() => {
     if (!editor) return;

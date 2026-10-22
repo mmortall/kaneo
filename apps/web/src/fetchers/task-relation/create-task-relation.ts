@@ -9,13 +9,16 @@ async function createTaskRelation({
   targetTaskId: string;
   relationType: "subtask" | "blocks" | "related";
 }) {
-  const response = await client["task-relation"].$post({
-    json: {
-      sourceTaskId,
-      targetTaskId,
-      relationType,
+  const response = await client["task-relation"].$post(
+    {
+      json: {
+        sourceTaskId,
+        targetTaskId,
+        relationType,
+      },
     },
-  });
+    { headers: { "Idempotency-Key": crypto.randomUUID() } },
+  );
 
   if (!response.ok) {
     const error = await response.text();

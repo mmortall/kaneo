@@ -75,6 +75,10 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
     showTaskNumbers,
   } = useUserPreferencesStore();
   const [isDeleteTaskModalOpen, setIsDeleteTaskModalOpen] = useState(false);
+  const [deleteSnapshot, setDeleteSnapshot] = useState<Pick<
+    Task,
+    "id" | "version" | "projectId"
+  > | null>(null);
   const { toggleSelection, isSelected, isFocused } = useBulkSelectionStore();
   const isTaskSelected = isSelected(task.id);
   const isTaskFocused = isFocused(task.id);
@@ -165,7 +169,8 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
 
   const handleDeleteTask = async () => {
     try {
-      await deleteTask(task.id);
+      if (!deleteSnapshot) return;
+      await deleteTask(deleteSnapshot);
       queryClient.invalidateQueries({
         queryKey: ["tasks", project?.id],
       });
@@ -403,7 +408,14 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
               projectId: project.id,
               worskpaceId: workspace.id,
             }}
-            onDeleteClick={() => setIsDeleteTaskModalOpen(true)}
+            onDeleteClick={() => {
+              setDeleteSnapshot({
+                id: task.id,
+                version: task.version,
+                projectId: task.projectId,
+              });
+              setIsDeleteTaskModalOpen(true);
+            }}
           />
         )}
       </ContextMenu>
@@ -420,15 +432,14 @@ function TaskCard({ task, disableDragDrop = false }: TaskCardProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose>
-              <Button variant="outline" size="sm">
-                {t("common:actions.cancel")}
-              </Button>
+            <AlertDialogClose render={<Button variant="outline" size="sm" />}>
+              {t("common:actions.cancel")}
             </AlertDialogClose>
-            <AlertDialogClose onClick={handleDeleteTask}>
-              <Button variant="destructive" size="sm">
-                {t("tasks:delete.action")}
-              </Button>
+            <AlertDialogClose
+              onClick={handleDeleteTask}
+              render={<Button variant="destructive" size="sm" />}
+            >
+              {t("tasks:delete.action")}
             </AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogContent>

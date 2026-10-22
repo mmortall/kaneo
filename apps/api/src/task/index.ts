@@ -25,6 +25,7 @@ import {
   validateDateRange,
 } from "../utils/validate-dates";
 import { workspaceAccess } from "../utils/workspace-access-middleware";
+import agent from "./agent";
 import bulkUpdateTasks from "./controllers/bulk-update-tasks";
 import createTask from "./controllers/create-task";
 import deleteTask from "./controllers/delete-task";
@@ -53,9 +54,11 @@ import { VALID_PRIORITIES } from "./validate-task-fields";
 const task = new Hono<{
   Variables: {
     userId: string;
+    workspaceId?: string;
     apiKey?: { id: string };
   };
 }>()
+  .route("/agent", agent)
   .get(
     "/tasks/:projectId",
     describeRoute({
@@ -112,8 +115,16 @@ const task = new Hono<{
       const filters = c.req.valid("query") || {};
 
       const tasks = await getTasks(projectId, filters);
-
-      return c.json(tasks);
+      const { total, totalPages } = tasks.pagination;
+      if (total === null || totalPages === null) {
+        throw new HTTPException(500, {
+          message: "Full task lists require counted pagination",
+        });
+      }
+      return c.json({
+        ...tasks,
+        pagination: { ...tasks.pagination, total, totalPages },
+      });
     },
   )
   .patch(
@@ -153,13 +164,26 @@ const task = new Hono<{
         ] as const),
         value: v.optional(v.nullable(v.string())),
         unblockNote: v.optional(v.string()),
+        expectedVersions: v.optional(
+          v.pipe(
+            v.array(
+              v.object({
+                id: v.string(),
+                version: v.pipe(v.number(), v.integer(), v.minValue(1)),
+              }),
+            ),
+            v.minLength(1),
+            v.maxLength(100),
+          ),
+        ),
       }),
     ),
     workspaceAccess.fromTasks(),
     requireBulkTaskPermission,
     requireBulkTaskEntitlement,
     async (c) => {
-      const { taskIds, operation, value, unblockNote } = c.req.valid("json");
+      const { taskIds, operation, value, unblockNote, expectedVersions } =
+        c.req.valid("json");
       const userId = c.get("userId");
 
       if (!userId) {
@@ -183,6 +207,8 @@ const task = new Hono<{
         userId,
         caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
         unblockNote,
+        expectedVersions,
+        workspaceId: c.get("workspaceId"),
       });
 
       return c.json(result);
@@ -334,6 +360,9 @@ const task = new Hono<{
       "json",
       v.object({
         destinationProjectId: v.string(),
+        expectedVersion: v.optional(
+          v.pipe(v.number(), v.integer(), v.minValue(1)),
+        ),
         destinationStatus: v.optional(v.string()),
         unblockNote: v.optional(v.string()),
       }),
@@ -343,14 +372,19 @@ const task = new Hono<{
     requireEntitlement,
     async (c) => {
       const { id } = c.req.valid("param");
-      const { destinationProjectId, destinationStatus, unblockNote } =
-        c.req.valid("json");
+      const {
+        destinationProjectId,
+        destinationStatus,
+        unblockNote,
+        expectedVersion,
+      } = c.req.valid("json");
       const currentUserId = c.get("userId");
 
       const result = await moveTask({
         taskId: id,
         destinationProjectId,
         destinationStatus,
+        expectedVersion,
         currentUserId,
         caller: c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
         unblockNote,
@@ -378,6 +412,7 @@ const task = new Hono<{
     validator(
       "json",
       v.object({
+        expectedVersion: v.pipe(v.number(), v.integer(), v.minValue(1)),
         title: v.string(),
         description: v.string(),
         startDate: v.optional(v.string()),
@@ -405,6 +440,7 @@ const task = new Hono<{
     async (c) => {
       const { id } = c.req.valid("param");
       const {
+        expectedVersion,
         title,
         description,
         startDate,
@@ -462,6 +498,7 @@ const task = new Hono<{
           unblockNote,
         },
         c.get("apiKey") ? "ai" : c.req.header("x-kaneo-caller"),
+        { expectedVersion, workspaceId: c.get("workspaceId") },
       );
 
       return c.json(task);
@@ -567,11 +604,27 @@ const task = new Hono<{
     validator("param", v.object({ id: v.string() })),
     workspaceAccess.fromTask(),
     requireWorkspacePermission({ task: ["delete"] }),
+    validator(
+      "query",
+      v.object({
+        expectedVersion: v.pipe(
+          v.string(),
+          v.transform(Number),
+          v.integer(),
+          v.minValue(1),
+        ),
+      }),
+    ),
     async (c) => {
       const { id } = c.req.valid("param");
 
       const currentUserId = c.get("userId");
-      const task = await deleteTask(id, currentUserId);
+      const task = await deleteTask(
+        id,
+        currentUserId,
+        c.req.valid("query").expectedVersion,
+        c.get("workspaceId"),
+      );
 
       return c.json(task);
     },

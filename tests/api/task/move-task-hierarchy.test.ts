@@ -5,7 +5,9 @@ const mockSelect = vi.fn();
 
 vi.mock("../../../apps/api/src/database", () => ({
   default: {
-    query: { taskTable: { findFirst: (...args: unknown[]) => mockFindFirst(...args) } },
+    query: {
+      taskTable: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
+    },
     select: (...args: unknown[]) => mockSelect(...args),
   },
 }));

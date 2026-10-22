@@ -17,7 +17,7 @@ import { toast } from "@/lib/toast";
 import type { ProjectWithTasks } from "@/types/project";
 
 type TasksImportExportProps = {
-  project: ProjectWithTasks;
+  project: Pick<ProjectWithTasks, "id" | "slug">;
 };
 
 export function TasksImportExport({ project }: TasksImportExportProps) {

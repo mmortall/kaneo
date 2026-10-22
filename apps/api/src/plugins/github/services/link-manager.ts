@@ -1,4 +1,5 @@
 import { and, eq } from "drizzle-orm";
+import { HTTPException } from "hono/http-exception";
 import db from "../../../database";
 import { externalLinkTable } from "../../../database/schema";
 
@@ -17,6 +18,78 @@ export type UpdateExternalLinkParams = {
   url?: string;
   metadata?: Record<string, unknown>;
 };
+
+/** Merge one completed issue field sync against locked current link metadata. */
+export async function recordExternalLinkFieldSync(params: {
+  linkId: string;
+  taskId: string;
+  integrationId: string;
+  externalId: string;
+  field: "title" | "description";
+  value: string;
+}) {
+  return db.transaction(async (tx) => {
+    const conflict = () => {
+      throw new HTTPException(409, {
+        message: "Issue link changed; reconcile synchronization metadata",
+      });
+    };
+    const [link] = await tx
+      .select()
+      .from(externalLinkTable)
+      .where(
+        and(
+          eq(externalLinkTable.id, params.linkId),
+          eq(externalLinkTable.taskId, params.taskId),
+          eq(externalLinkTable.integrationId, params.integrationId),
+          eq(externalLinkTable.externalId, params.externalId),
+          eq(externalLinkTable.resourceType, "issue"),
+        ),
+      )
+      .for("update");
+    if (!link) return conflict();
+    const record = (value: unknown): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null && !Array.isArray(value);
+    let metadata: Record<string, unknown> = {};
+    if (link.metadata) {
+      try {
+        const parsed: unknown = JSON.parse(link.metadata);
+        if (!record(parsed)) return conflict();
+        metadata = parsed;
+      } catch {
+        return conflict();
+      }
+    }
+    if (metadata.lastSync !== undefined && !record(metadata.lastSync))
+      return conflict();
+    const lastSync = record(metadata.lastSync) ? { ...metadata.lastSync } : {};
+    const previous = lastSync[params.field];
+    const unchanged =
+      record(previous) &&
+      previous.source === "kaneo" &&
+      previous.value === params.value;
+    const titleChanged =
+      params.field === "title" && link.title !== params.value;
+    if (unchanged && !titleChanged) return;
+    if (!unchanged)
+      lastSync[params.field] = {
+        timestamp: new Date().toISOString(),
+        source: "kaneo",
+        value: params.value,
+      };
+    const updated = await tx
+      .update(externalLinkTable)
+      .set({
+        ...(!unchanged
+          ? { metadata: JSON.stringify({ ...metadata, lastSync }) }
+          : {}),
+        ...(titleChanged ? { title: params.value } : {}),
+      })
+      .where(eq(externalLinkTable.id, link.id))
+      .returning({ id: externalLinkTable.id });
+    if (updated.length !== 1) return conflict();
+  });
+}
 
 export async function createExternalLink(
   params: CreateExternalLinkParams,

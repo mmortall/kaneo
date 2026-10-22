@@ -13,12 +13,13 @@ type SearchParams = {
   workspaceId?: string;
   projectId?: string;
   limit?: number;
+  taskArchive?: "active" | "archived" | "all";
 };
 
 function useGlobalSearch(params: SearchParams) {
   return useQuery({
     queryKey: ["search", params],
-    queryFn: () => globalSearch(params),
+    queryFn: ({ signal }) => globalSearch(params, signal),
     enabled: !!params.q && params.q.length >= 1,
     staleTime: 1000 * 30, // 30 seconds
   });

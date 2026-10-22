@@ -2,13 +2,13 @@ import { Check } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { VIRTUAL_TASK_STATUSES } from "@/constants/virtual-statuses";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ShortcutNumber } from "@/components/ui/shortcut-number";
+import { VIRTUAL_TASK_STATUSES } from "@/constants/virtual-statuses";
 import { useUpdateTaskStatus } from "@/hooks/mutations/task/use-update-task-status";
 import { useGetColumns } from "@/hooks/queries/column/use-get-columns";
 import { useNumberedShortcuts } from "@/hooks/use-numbered-shortcuts";
@@ -31,21 +31,20 @@ export default function TaskStatusPopover({
   const [open, setOpen] = useState(false);
   const { data: columns, isLoading, isError } = useGetColumns(task.projectId);
   const statusOptions = useMemo(
-    () =>
-      [
-        ...(columns ?? []).map((col) => ({
-          value: col.slug,
-          label: col.name,
-          icon: col.icon,
-          isFinal: col.isFinal,
-        })),
-        ...VIRTUAL_TASK_STATUSES.map((status) => ({
-          value: status.value,
-          label: status.name,
-          icon: null,
-          isFinal: status.isFinal,
-        })),
-      ],
+    () => [
+      ...(columns ?? []).map((col) => ({
+        value: col.slug,
+        label: col.name,
+        icon: col.icon,
+        isFinal: col.isFinal,
+      })),
+      ...VIRTUAL_TASK_STATUSES.map((status) => ({
+        value: status.value,
+        label: status.name,
+        icon: null,
+        isFinal: status.isFinal,
+      })),
+    ],
     [columns],
   );
   const { mutateAsync: updateTaskStatus } = useUpdateTaskStatus();

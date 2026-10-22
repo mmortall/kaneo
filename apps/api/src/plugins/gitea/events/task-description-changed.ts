@@ -1,6 +1,6 @@
 import {
   findExternalLinksByTask,
-  updateExternalLink,
+  recordExternalLinkFieldSync,
 } from "../../github/services/link-manager";
 import { formatIssueBody } from "../../github/utils/format";
 import type { PluginContext, TaskDescriptionChangedEvent } from "../../types";
@@ -71,19 +71,6 @@ export async function handleTaskDescriptionChanged(
         console.log("Skipping description sync - already synced from Gitea");
         return;
       }
-
-      const timeSinceLastSync =
-        Date.now() - new Date(lastDescSync.timestamp).getTime();
-      if (
-        timeSinceLastSync < 2000 &&
-        lastDescSync.source === "gitea" &&
-        newDescNormalized === lastDescSync.value
-      ) {
-        console.log(
-          `Skipping description sync - recent sync detected (${timeSinceLastSync}ms ago)`,
-        );
-        return;
-      }
     }
 
     const client = createGiteaClient(config);
@@ -103,18 +90,13 @@ export async function handleTaskDescriptionChanged(
       body: formattedBody,
     });
 
-    await updateExternalLink(issueLink.id, {
-      metadata: {
-        ...metadata,
-        lastSync: {
-          ...(metadata.lastSync ?? {}),
-          description: {
-            timestamp: new Date().toISOString(),
-            source: "kaneo",
-            value: newDescNormalized,
-          },
-        },
-      },
+    await recordExternalLinkFieldSync({
+      linkId: issueLink.id,
+      taskId: event.taskId,
+      integrationId: context.integrationId,
+      externalId: issueLink.externalId,
+      field: "description",
+      value: newDescNormalized,
     });
 
     console.log(`Synced task description to Gitea issue #${issueNumber}`);

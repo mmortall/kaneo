@@ -1,3 +1,4 @@
+import { getTableName } from "drizzle-orm";
 import {
   afterEach,
   beforeEach,
@@ -12,6 +13,32 @@ const mockFindFirst = vi.fn();
 const mockSelect = vi.fn();
 const mockDelete = vi.fn();
 const mockInsert = vi.fn();
+const mockUpdate = vi.fn();
+
+function transactionSelect() {
+  let tableName = "";
+  const rows = async () =>
+    tableName === "label"
+      ? [await mockFindFirst()]
+      : tableName === "project"
+        ? [{ workspaceId: "ws-1" }]
+        : [TASK, { ...TASK, id: "task-old" }];
+  const chain = {
+    from: (table: Parameters<typeof getTableName>[0]) => {
+      tableName = getTableName(table);
+      return chain;
+    },
+    where: () => chain,
+    orderBy: () => chain,
+    for: () => rows(),
+    // biome-ignore lint/suspicious/noThenProperty: the query-builder mock must be awaitable like drizzle's builder
+    then: (
+      resolve: (value: unknown[]) => unknown,
+      reject: (error: unknown) => unknown,
+    ) => rows().then(resolve, reject),
+  };
+  return chain;
+}
 const mockPublishEvent = vi.fn();
 const mockRemoveLabelFromGitHub = vi.fn();
 const mockRemoveLabelFromGitea = vi.fn();
@@ -20,6 +47,11 @@ const mockSyncLabelToGitea = vi.fn();
 
 function createMockTxContext() {
   return {
+    select: transactionSelect,
+    update: (...args: unknown[]) => {
+      mockUpdate(...args);
+      return { set: () => ({ where: async () => undefined }) };
+    },
     insert: (...args: unknown[]) => mockInsert(...args),
     delete: (...args: unknown[]) => mockDelete(...args),
     query: {
@@ -148,6 +180,7 @@ describe("unassignLabelFromTask", () => {
     await unassignLabelFromTask("label-task-1", "user-1");
 
     expect(mockDelete).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockPublishEvent).toHaveBeenCalledWith("task.label_unassigned", {
       label: TASK_LABEL,
       task: TASK,
@@ -207,6 +240,7 @@ describe("assignLabelToTask", () => {
 
     expect(result).toEqual(insertedCopy);
     expect(mockInsert).toHaveBeenCalledTimes(1);
+    expect(mockUpdate).toHaveBeenCalledTimes(1);
     expect(mockDelete).not.toHaveBeenCalled();
     expect(insertChain.onConflict).toHaveBeenCalledWith({
       target: [expect.anything(), expect.anything()],
@@ -239,6 +273,7 @@ describe("assignLabelToTask", () => {
 
     expect(result).toEqual({ ...TASK_LABEL, taskId: "task-1" });
     expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
     expect(mockDelete).not.toHaveBeenCalled();
     expect(mockPublishEvent).not.toHaveBeenCalled();
   });

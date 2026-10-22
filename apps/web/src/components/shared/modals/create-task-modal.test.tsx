@@ -41,8 +41,17 @@ vi.mock("@/hooks/mutations/task/use-update-task", () => ({
   useUpdateTask: () => ({ mutateAsync: vi.fn() }),
 }));
 
-vi.mock("@/hooks/queries/label/use-get-labels-by-workspace", () => ({
-  default: () => ({ data: [] }),
+vi.mock("@/hooks/queries/label/use-get-label-catalogue", () => ({
+  default: () => ({
+    data: {
+      items: [],
+      pagination: { total: 0, totalPages: 0, page: 1, hasMore: false },
+    },
+    isFetching: false,
+    isPending: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
 }));
 
 vi.mock("@/hooks/queries/workspace/use-active-workspace", () => ({

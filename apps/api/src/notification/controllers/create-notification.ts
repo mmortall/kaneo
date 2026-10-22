@@ -12,6 +12,7 @@ async function createNotification({
   eventData,
   resourceId,
   resourceType,
+  operationKey,
 }: {
   userId: string;
   title?: string | null;
@@ -20,6 +21,7 @@ async function createNotification({
   eventData?: Record<string, unknown> | null;
   resourceId?: string;
   resourceType?: string;
+  operationKey?: string;
 }) {
   const preferenceKey =
     type === "task_assignee_changed" || type === "task_created"
@@ -44,19 +46,21 @@ async function createNotification({
     }
   }
 
-  const [notification] = await db
-    .insert(notificationTable)
-    .values({
-      id: createId(),
-      userId,
-      title: title ?? null,
-      content: content ?? null,
-      type: type || "info",
-      eventData: eventData ?? null,
-      resourceId: resourceId || null,
-      resourceType: resourceType || null,
-    })
-    .returning();
+  const insertion = db.insert(notificationTable).values({
+    id: createId(),
+    userId,
+    title: title ?? null,
+    content: content ?? null,
+    type: type || "info",
+    eventData: eventData ?? null,
+    resourceId: resourceId || null,
+    resourceType: resourceType || null,
+    ...(operationKey ? { operationKey } : {}),
+  });
+  const [notification] = await (operationKey
+    ? insertion.onConflictDoNothing({ target: notificationTable.operationKey })
+    : insertion
+  ).returning();
 
   if (notification) {
     await publishEvent("notification.created", {

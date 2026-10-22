@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -9,15 +10,16 @@ import ListView from "@/components/list-view";
 import PageTitle from "@/components/page-title";
 import CreateTaskModal from "@/components/shared/modals/create-task-modal";
 import TaskDetailsSheet from "@/components/task/task-details-sheet";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { shortcuts } from "@/constants/shortcuts";
-import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
-import { useGetTasks } from "@/hooks/queries/task/use-get-tasks";
+import { useGetTaskView } from "@/hooks/queries/task/use-get-task-view";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useBoardSort } from "@/hooks/use-board-sort";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { useTaskFiltersWithLabelsSupport } from "@/hooks/use-task-filters-with-labels-support";
-import { sortTasks } from "@/lib/sort-tasks";
+import { taskViewFilters } from "@/lib/task-view-filters";
+import useBulkSelectionStore from "@/store/bulk-selection";
 import useProjectStore from "@/store/project";
 import { useUserPreferencesStore } from "@/store/user-preferences";
 
@@ -79,9 +81,11 @@ function RouteComponent() {
   const { projectId, workspaceId } = Route.useParams();
   const { taskId } = Route.useSearch();
   const navigate = useNavigate();
-  const { data } = useGetTasks(projectId);
-  const { project, setProject } = useProjectStore();
-  const { viewMode, setViewMode } = useUserPreferencesStore();
+  const queryClient = useQueryClient();
+  const { setProject } = useProjectStore();
+  const { viewMode, setViewMode, weekStartsOn } = useUserPreferencesStore();
+  const [pageState, setPageState] = useState({ scope: "", page: 1 });
+  const [searchText, setSearchText] = useState("");
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [boardSearchQuery, setBoardSearchQuery] = useState("");
   const [isBoardSearchMounted, setIsBoardSearchMounted] = useState(false);
@@ -91,7 +95,6 @@ function RouteComponent() {
   const { sort, setSort } = useBoardSort(projectId);
 
   const { data: users } = useGetActiveWorkspaceUsers(workspaceId);
-  const { data: workspaceLabels = [] } = useGetLabelsByWorkspace(workspaceId);
 
   const handleCloseTaskSheet = useCallback(() => {
     navigate({
@@ -121,10 +124,9 @@ function RouteComponent() {
   });
 
   useEffect(() => {
-    if (data) {
-      setProject(data);
-    }
-  }, [data, setProject]);
+    const timer = window.setTimeout(() => setSearchText(boardSearchQuery), 250);
+    return () => window.clearTimeout(timer);
+  }, [boardSearchQuery]);
 
   const openBoardSearch = useCallback(() => {
     setIsBoardSearchMounted(true);
@@ -156,25 +158,49 @@ function RouteComponent() {
     window.requestAnimationFrame(() => boardSearchInput?.focus());
   }, [isBoardSearchMounted, boardSearchInput]);
 
-  const {
-    filters,
-    updateFilter,
-    updateLabelFilter,
-    filteredProject,
-    hasActiveFilters,
-    clearFilters,
-  } = useTaskFiltersWithLabelsSupport(project, projectId, boardSearchQuery);
+  const { filters, updateFilter, hasActiveFilters, clearFilters } =
+    useTaskFiltersWithLabelsSupport(undefined, projectId);
 
-  const sortedProject = useMemo(() => {
-    if (!filteredProject || sort.field === "position") return filteredProject;
-    return {
-      ...filteredProject,
-      columns: filteredProject.columns.map((column) => ({
-        ...column,
-        tasks: sortTasks(column.tasks, sort),
-      })),
-    };
-  }, [filteredProject, sort]);
+  const serverFilters = useMemo(
+    () => ({
+      ...taskViewFilters(filters, searchText, weekStartsOn, new Date()),
+      excludeStatuses: ["archived", "planned", "blocked"],
+    }),
+    [filters, searchText, weekStartsOn],
+  );
+  const scope = JSON.stringify([projectId, serverFilters, sort]);
+  const page = pageState.scope === scope ? pageState.page : 1;
+  const view = useGetTaskView(projectId, {
+    filters: serverFilters,
+    page,
+    limit: 50,
+    sortBy: sort.field,
+    sortOrder: sort.direction,
+  });
+  const project = view.data?.data;
+  const pagination = view.data?.pagination;
+  useEffect(() => {
+    setProject(project);
+  }, [project, setProject]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependency list kept as deployed; it intentionally re-runs or resets on these values
+  useEffect(() => {
+    const selection = useBulkSelectionStore.getState();
+    selection.clearSelection();
+    selection.clearFocus();
+  }, [scope, page]);
+  useEffect(() => {
+    if (
+      pagination &&
+      pagination.totalPages !== null &&
+      page > pagination.totalPages
+    ) {
+      void queryClient.invalidateQueries({
+        queryKey: ["tasks", projectId, "view"],
+        refetchType: "none",
+      });
+      setPageState({ scope, page: pagination.totalPages });
+    }
+  }, [pagination, page, scope, projectId, queryClient]);
 
   const boardHeaderSearch = isBoardSearchMounted ? (
     <div
@@ -221,27 +247,65 @@ function RouteComponent() {
           project={project}
           filters={filters}
           updateFilter={updateFilter}
-          updateLabelFilter={updateLabelFilter}
           clearFilters={clearFilters}
           hasActiveFilters={hasActiveFilters}
           users={users}
-          workspaceLabels={workspaceLabels}
+          workspaceId={workspaceId}
           viewMode={viewMode}
           setViewMode={setViewMode}
           sort={sort}
           onSortChange={setSort}
         />
 
+        <div className="flex flex-wrap items-center gap-2 border-b px-4 py-2 text-sm">
+          <span>
+            {pagination
+              ? `Page ${page} of ${pagination.totalPages} - ${pagination.total} tasks`
+              : "Loading..."}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1 || view.isFetching}
+            onClick={() => setPageState({ scope, page: page - 1 })}
+          >
+            Previous
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!pagination?.hasMore || view.isFetching}
+            onClick={() => setPageState({ scope, page: page + 1 })}
+          >
+            Next
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={view.isFetching}
+            onClick={() => void view.refetch()}
+          >
+            Refresh
+          </Button>
+          <span className="text-muted-foreground">
+            Selections apply to this page.
+          </span>
+        </div>
+        {view.isError && (
+          <p role="alert" className="px-4 py-2 text-destructive">
+            {view.error.message}
+          </p>
+        )}
         <div className="flex h-full flex-1 overflow-hidden bg-background">
-          {sortedProject ? (
+          {project ? (
             viewMode === "board" ? (
               <KanbanBoard
-                project={sortedProject}
+                project={project}
                 disableDragDrop={sort.field !== "position"}
               />
             ) : (
               <ListView
-                project={sortedProject}
+                project={project}
                 disableDragDrop={sort.field !== "position"}
               />
             )

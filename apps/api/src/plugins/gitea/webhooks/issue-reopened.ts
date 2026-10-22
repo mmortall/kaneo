@@ -137,6 +137,7 @@ export async function handleGiteaIssueReopened(
         repository: `${owner}/${repository.name}`,
         error,
       });
+      throw error;
     }
   }
 }

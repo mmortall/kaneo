@@ -1,4 +1,11 @@
 import type { AuthService } from "../auth/auth-service.js";
+import {
+  awaitOperation,
+  httpCategory,
+  KaneoRequestError,
+  withOperation,
+} from "./operation.js";
+import { requestText } from "./request.js";
 
 export type Json =
   | null
@@ -11,6 +18,21 @@ export type Json =
 export class KaneoClient {
   readonly baseUrl: string;
   private readonly auth: AuthService;
+  private relationIdempotency?: Promise<boolean>;
+
+  private supportsRelationIdempotency(): Promise<boolean> {
+    this.relationIdempotency ??= this.json<{ relationIdempotency?: boolean }>(
+      "/api/task/agent/capabilities",
+    )
+      .then((capabilities) => capabilities.relationIdempotency === true)
+      .catch((error) => {
+        if (error instanceof KaneoRequestError && error.details.status === 404)
+          return false;
+        this.relationIdempotency = undefined;
+        throw error;
+      });
+    return this.relationIdempotency;
+  }
 
   constructor(options: { baseUrl: string; auth: AuthService }) {
     this.baseUrl = options.baseUrl;
@@ -21,9 +43,21 @@ export class KaneoClient {
     path: string,
     init?: RequestInit,
     didRetry = false,
-  ): Promise<Response> {
-    const token = await this.auth.getAccessToken();
+  ): Promise<{
+    response: Response;
+    text: string;
+    diagnostics: Record<string, unknown>;
+  }> {
+    const token = await awaitOperation(this.auth.getAccessToken());
     const headers = new Headers(init?.headers);
+    if (
+      init?.method?.toUpperCase() === "POST" &&
+      /\/task-relation\/?$/.test(path) &&
+      !headers.has("Idempotency-Key") &&
+      (await this.supportsRelationIdempotency())
+    ) {
+      headers.set("Idempotency-Key", crypto.randomUUID());
+    }
     headers.set("Authorization", `Bearer ${token}`);
     headers.set("x-kaneo-caller", "ai");
     if (init?.body != null && !headers.has("Content-Type")) {
@@ -31,30 +65,64 @@ export class KaneoClient {
     }
 
     const url = `${this.baseUrl}${path.startsWith("/") ? path : `/${path}`}`;
-    const timeoutSignal = AbortSignal.timeout(10_000);
-    const signal = init?.signal
-      ? AbortSignal.any([init.signal, timeoutSignal])
-      : timeoutSignal;
-    const res = await fetch(url, { ...init, headers, signal });
+    const result = await requestText(url, { ...init, headers });
+    const res = result.response;
 
     // With a static API key there is nothing to refresh, so surface the 401
     // instead of looping back into the interactive device flow.
     if (res.status === 401 && !didRetry && !this.auth.usingApiKey) {
-      await this.auth.clearToken();
+      await awaitOperation(this.auth.clearToken(token));
       return this.authorizedFetch(path, init, true);
     }
 
-    return res;
+    return result;
   }
 
   async json<T = Json>(path: string, init?: RequestInit): Promise<T> {
-    const res = await this.authorizedFetch(path, init);
-    const text = await res.text();
+    try {
+      return await withOperation(
+        () => this.jsonInOperation<T>(path, init),
+        init?.signal ?? undefined,
+      );
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        ["AbortError", "TimeoutError"].includes(error.name)
+      ) {
+        throw new KaneoRequestError(
+          `Kaneo authentication ${error.name === "TimeoutError" ? "deadline exceeded" : "cancelled"}`,
+          {
+            category: error.name === "TimeoutError" ? "deadline" : "cancelled",
+            stage: "authentication",
+            endpoint: new URL(this.baseUrl).origin,
+            ambiguous_write: false,
+          },
+        );
+      }
+      throw error;
+    }
+  }
+
+  private async jsonInOperation<T>(
+    path: string,
+    init?: RequestInit,
+  ): Promise<T> {
+    const {
+      response: res,
+      text,
+      diagnostics,
+    } = await this.authorizedFetch(path, init);
     let body: unknown = null;
     if (text) {
       try {
         body = JSON.parse(text) as unknown;
       } catch {
+        if (res.ok)
+          throw new KaneoRequestError(`${path}: Invalid JSON response`, {
+            ...diagnostics,
+            category: "response",
+            ambiguous_write: (init?.method ?? "GET").toUpperCase() !== "GET",
+          });
         body = text;
       }
     }
@@ -79,7 +147,15 @@ export class KaneoClient {
       } else {
         detail = `HTTP ${res.status}`;
       }
-      throw new Error(`${path}: ${detail}`);
+      const category = httpCategory(res.status, body);
+      throw new KaneoRequestError(`${path}: ${detail}`, {
+        ...diagnostics,
+        category,
+        ambiguous_write:
+          (init?.method ?? "GET").toUpperCase() !== "GET" &&
+          ["upstream", "tunnel"].includes(category),
+        server: typeof body === "object" ? body : undefined,
+      });
     }
     return body as T;
   }

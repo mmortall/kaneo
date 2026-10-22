@@ -1,6 +1,6 @@
 import {
   findExternalLinksByTask,
-  updateExternalLink,
+  recordExternalLinkFieldSync,
 } from "../../github/services/link-manager";
 import type { PluginContext, TaskTitleChangedEvent } from "../../types";
 import type { GiteaConfig } from "../config";
@@ -68,15 +68,6 @@ export async function handleTaskTitleChanged(
         console.log("Skipping title sync - already synced from Gitea");
         return;
       }
-
-      const timeSinceLastSync =
-        Date.now() - new Date(lastTitleSync.timestamp).getTime();
-      if (lastTitleSync.source === "gitea" && timeSinceLastSync < 2000) {
-        console.log(
-          `Skipping title sync - recent sync detected (${timeSinceLastSync}ms ago)`,
-        );
-        return;
-      }
     }
 
     const client = createGiteaClient(config);
@@ -94,19 +85,13 @@ export async function handleTaskTitleChanged(
       title: event.newTitle,
     });
 
-    await updateExternalLink(issueLink.id, {
-      title: event.newTitle,
-      metadata: {
-        ...metadata,
-        lastSync: {
-          ...(metadata.lastSync ?? {}),
-          title: {
-            timestamp: new Date().toISOString(),
-            source: "kaneo",
-            value: event.newTitle,
-          },
-        },
-      },
+    await recordExternalLinkFieldSync({
+      linkId: issueLink.id,
+      taskId: event.taskId,
+      integrationId: context.integrationId,
+      externalId: issueLink.externalId,
+      field: "title",
+      value: event.newTitle,
     });
 
     console.log(`Synced task title to Gitea issue #${issueNumber}`);

@@ -23,6 +23,7 @@ export const projectSchema = v.object({
 
 export const taskSchema = v.object({
   id: v.string(),
+  version: v.number(),
   projectId: v.string(),
   position: v.nullable(v.number()),
   number: v.nullable(v.number()),

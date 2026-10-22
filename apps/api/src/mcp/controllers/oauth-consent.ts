@@ -88,7 +88,10 @@ export async function beginMcpAuthorization(
     redirectUri: input.redirect_uri,
     state: input.state,
   });
-  const consentUrl = new URL("/mcp/authorize", clientUrl);
+  const consentUrl = new URL(clientUrl);
+  consentUrl.pathname = `${consentUrl.pathname.replace(/\/+$/, "")}/mcp/authorize`;
+  consentUrl.search = "";
+  consentUrl.hash = "";
   consentUrl.searchParams.set("request_id", requestId);
   return consentUrl.toString();
 }

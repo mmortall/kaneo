@@ -1,14 +1,15 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { produce } from "immer";
 import { ArrowRight, Calendar, Filter, Plus, User, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import BacklogListView from "@/components/backlog-list-view";
+import LabelFilterPicker from "@/components/common/label-filter-picker";
 import ProjectLayout from "@/components/common/project-layout";
 import SortControl from "@/components/common/sort-control";
 import PageTitle from "@/components/page-title";
 import CreateTaskModal from "@/components/shared/modals/create-task-modal";
+import { TaskGroupModal } from "@/components/shared/modals/task-group-modal";
 import TaskDetailsSheet from "@/components/task/task-details-sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -22,11 +23,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/menu";
-import labelColors from "@/constants/label-colors";
 import { shortcuts } from "@/constants/shortcuts";
-import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
-import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
-import { useGetTasks } from "@/hooks/queries/task/use-get-tasks";
+import { useGetTaskView } from "@/hooks/queries/task/use-get-task-view";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useRegisterShortcuts } from "@/hooks/use-keyboard-shortcuts";
 import { DUE_DATE_FILTER_VALUES } from "@/hooks/use-task-filters";
@@ -34,11 +32,10 @@ import { getInitials } from "@/lib/get-initials";
 import { getPriorityLabel } from "@/lib/i18n/domain";
 import { getPriorityIcon } from "@/lib/priority";
 import type { SortConfig } from "@/lib/sort-tasks";
-import { sortTasks } from "@/lib/sort-tasks";
-import { toast } from "@/lib/toast";
+import { taskViewFilters } from "@/lib/task-view-filters";
+import useBacklogBulkSelectionStore from "@/store/backlog-bulk-selection";
 import useProjectStore from "@/store/project";
 import { useUserPreferencesStore } from "@/store/user-preferences";
-import type Task from "@/types/task";
 
 type BacklogSearchParams = {
   taskId?: string;
@@ -58,18 +55,21 @@ function RouteComponent() {
   const { projectId, workspaceId } = Route.useParams();
   const { taskId } = Route.useSearch();
   const navigate = useNavigate();
-  const { data } = useGetTasks(projectId);
-  const { project, setProject } = useProjectStore();
+  const queryClient = useQueryClient();
+  const { setProject } = useProjectStore();
+  const [section, setSection] = useState<"planned" | "blocked" | "archived">(
+    "planned",
+  );
+  const [pageState, setPageState] = useState({ scope: "", page: 1 });
+  const weekStartsOn = useUserPreferencesStore((state) => state.weekStartsOn);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const { mutate: updateTask } = useUpdateTask();
+  const [isActivationModalOpen, setIsActivationModalOpen] = useState(false);
   const [sort, setSort] = useState<SortConfig>({
     field: "position",
     direction: "asc",
   });
 
   const { data: users } = useGetActiveWorkspaceUsers(workspaceId);
-  const { data: workspaceLabels = [] } = useGetLabelsByWorkspace(workspaceId);
-  const queryClient = useQueryClient();
 
   const handleCloseTaskSheet = useCallback(() => {
     navigate({
@@ -120,15 +120,6 @@ function RouteComponent() {
     setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
-  const updateLabelFilter = (labelId: string) => {
-    setFilters((prev) => ({
-      ...prev,
-      labels: prev.labels.includes(labelId)
-        ? prev.labels.filter((id) => id !== labelId)
-        : [...prev.labels, labelId],
-    }));
-  };
-
   const clearFilters = () => {
     setFilters({
       priority: null,
@@ -142,213 +133,59 @@ function RouteComponent() {
     Array.isArray(filter) ? filter.length > 0 : filter !== null,
   );
 
+  const serverFilters = useMemo(
+    () =>
+      taskViewFilters(
+        {
+          status: [section],
+          priority: filters.priority ? [filters.priority] : null,
+          assignee: filters.assignee ? [filters.assignee] : null,
+          dueDate: filters.dueDate ? [filters.dueDate] : null,
+          labels: filters.labels.length ? filters.labels : null,
+        },
+        "",
+        weekStartsOn,
+        new Date(),
+      ),
+    [section, filters, weekStartsOn],
+  );
+  const scope = JSON.stringify([projectId, serverFilters, sort]);
+  const page = pageState.scope === scope ? pageState.page : 1;
+  const view = useGetTaskView(projectId, {
+    filters: serverFilters,
+    page,
+    limit: 50,
+    sortBy: sort.field,
+    sortOrder: sort.direction,
+  });
+  const project = view.data?.data;
+  const pagination = view.data?.pagination;
   useEffect(() => {
-    if (data) {
-      setProject(data);
+    if (
+      pagination &&
+      pagination.totalPages !== null &&
+      page > pagination.totalPages
+    ) {
+      void queryClient.invalidateQueries({
+        queryKey: ["tasks", projectId, "view"],
+        refetchType: "none",
+      });
+      setPageState({ scope, page: pagination.totalPages });
     }
-  }, [data, setProject]);
+  }, [pagination, page, scope, projectId, queryClient]);
+  useEffect(() => {
+    setProject(project);
+  }, [project, setProject]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: dependency list kept as deployed; it intentionally re-runs or resets on these values
+  useEffect(() => {
+    const selection = useBacklogBulkSelectionStore.getState();
+    selection.clearSelection();
+    selection.clearFocus();
+  }, [scope, page]);
 
   const getAssigneeDisplayName = (userId: string) => {
     const member = users?.members?.find((m) => m.userId === userId);
     return member?.user?.name || t("common:people.unknown");
-  };
-
-  const getTaskLabels = useCallback(
-    (taskId: string) => {
-      const queryKey = ["labels", taskId];
-      const cachedData = queryClient.getQueryData(queryKey) as
-        | Array<{ id: string; name: string; color: string }>
-        | undefined;
-      return cachedData || [];
-    },
-    [queryClient],
-  );
-
-  const filteredProject = useMemo(() => {
-    if (!project) return null;
-
-    const filterTasks = (tasks: Task[]) => {
-      return tasks.filter((task) => {
-        if (filters.priority && task.priority !== filters.priority) {
-          return false;
-        }
-
-        if (filters.assignee && task.userId !== filters.assignee) {
-          return false;
-        }
-
-        if (filters.dueDate && task.dueDate) {
-          const today = new Date();
-          const taskDate = new Date(task.dueDate);
-
-          switch (filters.dueDate) {
-            case DUE_DATE_FILTER_VALUES.dueThisWeek: {
-              const weekStart = new Date(
-                today.getFullYear(),
-                today.getMonth(),
-                today.getDate() - today.getDay(),
-              );
-              const weekEnd = new Date(
-                weekStart.getTime() + 6 * 24 * 60 * 60 * 1000,
-              );
-              if (taskDate < weekStart || taskDate > weekEnd) {
-                return false;
-              }
-              break;
-            }
-            case DUE_DATE_FILTER_VALUES.dueNextWeek: {
-              const nextWeekStart = new Date(
-                today.getFullYear(),
-                today.getMonth(),
-                today.getDate() - today.getDay() + 7,
-              );
-              const nextWeekEnd = new Date(
-                nextWeekStart.getTime() + 6 * 24 * 60 * 60 * 1000,
-              );
-              if (taskDate < nextWeekStart || taskDate > nextWeekEnd) {
-                return false;
-              }
-              break;
-            }
-            case DUE_DATE_FILTER_VALUES.noDueDate: {
-              return false;
-            }
-          }
-        }
-
-        if (
-          filters.dueDate === DUE_DATE_FILTER_VALUES.noDueDate &&
-          task.dueDate
-        ) {
-          return false;
-        }
-
-        if (filters.labels.length > 0) {
-          const taskLabels = getTaskLabels(task.id);
-          const taskLabelIds = taskLabels.map((label) => label.id);
-          const hasMatchingLabel = filters.labels.some((filterLabelId) =>
-            taskLabelIds.includes(filterLabelId),
-          );
-          if (!hasMatchingLabel) {
-            return false;
-          }
-        }
-
-        return true;
-      });
-    };
-
-    return {
-      ...project,
-      plannedTasks: filterTasks(project.plannedTasks || []),
-      blockedTasks: filterTasks(project.blockedTasks || []),
-      archivedTasks: filterTasks(project.archivedTasks || []),
-    };
-  }, [project, filters, getTaskLabels]);
-
-  const uniqueLabels = workspaceLabels.reduce(
-    (
-      acc: { id: string; name: string; color: string }[],
-      label: { id: string; name: string; color: string },
-    ) => {
-      const existing = acc.find(
-        (l) => l.name === label.name && l.color === label.color,
-      );
-      if (!existing) {
-        acc.push(label);
-      }
-      return acc;
-    },
-    [],
-  );
-
-  const isLabelGroupSelected = (label: { name: string; color: string }) => {
-    return workspaceLabels
-      .filter(
-        (l: { name: string; color: string }) =>
-          l.name === label.name && l.color === label.color,
-      )
-      .some((l: { id: string }) => filters.labels?.includes(l.id));
-  };
-
-  const toggleLabelGroup = (label: { name: string; color: string }) => {
-    const matchingLabels = workspaceLabels.filter(
-      (l: { name: string; color: string }) =>
-        l.name === label.name && l.color === label.color,
-    );
-
-    const isAnySelected = matchingLabels.some((l: { id: string }) =>
-      filters.labels?.includes(l.id),
-    );
-
-    if (isAnySelected) {
-      for (const l of matchingLabels) {
-        if (filters.labels?.includes(l.id)) {
-          updateLabelFilter(l.id);
-        }
-      }
-    } else {
-      for (const l of matchingLabels) {
-        if (!filters.labels?.includes(l.id)) {
-          updateLabelFilter(l.id);
-        }
-      }
-    }
-  };
-
-  const sortedProject = useMemo(() => {
-    if (!filteredProject || sort.field === "position") return filteredProject;
-    return {
-      ...filteredProject,
-      plannedTasks: sortTasks(filteredProject.plannedTasks || [], sort),
-      blockedTasks: sortTasks(filteredProject.blockedTasks || [], sort),
-      archivedTasks: sortTasks(filteredProject.archivedTasks || [], sort),
-    };
-  }, [filteredProject, sort]);
-
-  const handleMoveAllPlannedToTodo = () => {
-    if (!project) return;
-
-    const plannedTasks = project.plannedTasks || [];
-
-    if (plannedTasks.length === 0) {
-      toast.info(t("tasks:backlog.noTasksToMove"));
-      return;
-    }
-
-    if (
-      !confirm(
-        t("tasks:backlog.moveAllConfirm", { count: plannedTasks.length }),
-      )
-    ) {
-      return;
-    }
-
-    for (const task of plannedTasks) {
-      updateTask({
-        ...task,
-        status: "to-do",
-      });
-    }
-
-    const updatedProject = produce(project, (draft) => {
-      const todoColumn = draft.columns?.find((col) => col.id === "to-do");
-      if (todoColumn && draft.plannedTasks) {
-        todoColumn.tasks.push(
-          ...draft.plannedTasks.map((task) => ({
-            ...task,
-            status: "to-do",
-          })),
-        );
-
-        draft.plannedTasks = [];
-      }
-    });
-
-    setProject(updatedProject);
-    toast.success(
-      t("tasks:backlog.moveAllSuccess", { count: plannedTasks.length }),
-    );
   };
 
   return (
@@ -357,6 +194,17 @@ function RouteComponent() {
       workspaceId={workspaceId}
       activeView="backlog"
     >
+      <TaskGroupModal
+        open={isActivationModalOpen}
+        onClose={() => setIsActivationModalOpen(false)}
+        projectId={projectId}
+        action="activate_planned"
+        status="to-do"
+        destinationName={
+          project?.columns.find((column) => column.id === "to-do")?.name ??
+          "To Do"
+        }
+      />
       <PageTitle
         title={t("tasks:backlog.pageTitle", { name: project?.name })}
       />
@@ -378,7 +226,7 @@ function RouteComponent() {
                 <Button
                   variant="ghost"
                   size="xs"
-                  onClick={handleMoveAllPlannedToTodo}
+                  onClick={() => setIsActivationModalOpen(true)}
                   className="h-6 px-2 text-xs text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                   title={t("tasks:backlog.moveAllTooltip")}
                 >
@@ -472,53 +320,13 @@ function RouteComponent() {
                   </Button>
                 )}
 
-                {filters.labels &&
-                  filters.labels.length > 0 &&
-                  uniqueLabels
-                    .filter((uniqueLabel) =>
-                      workspaceLabels
-                        .filter(
-                          (l: { name: string; color: string }) =>
-                            l.name === uniqueLabel.name &&
-                            l.color === uniqueLabel.color,
-                        )
-                        .some((l: { id: string }) =>
-                          filters.labels?.includes(l.id),
-                        ),
-                    )
-                    .map((label) => (
-                      <Button
-                        key={`${label.name}-${label.color}`}
-                        variant="secondary"
-                        size="xs"
-                        className="h-7 rounded-md px-2 text-xs font-medium gap-1.5"
-                      >
-                        <span
-                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                          style={{
-                            backgroundColor:
-                              labelColors.find((c) => c.value === label.color)
-                                ?.color || "var(--color-neutral-400)",
-                          }}
-                        />
-                        <span>
-                          {t("tasks:backlog.filters.label", {
-                            name: label.name,
-                          })}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-4 w-4 p-0 ml-1 hover:bg-destructive hover:text-destructive-foreground"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleLabelGroup(label);
-                          }}
-                        >
-                          <X className="h-2.5 w-2.5" />
-                        </Button>
-                      </Button>
-                    ))}
+                <LabelFilterPicker
+                  workspaceId={workspaceId}
+                  selected={filters.labels}
+                  onChange={(values) =>
+                    setFilters((prev) => ({ ...prev, labels: values ?? [] }))
+                  }
+                />
 
                 <SortControl sort={sort} onSortChange={setSort} />
 
@@ -639,49 +447,6 @@ function RouteComponent() {
                         <span>{t(`tasks:backlog.filters.${item.key}`)}</span>
                       </DropdownMenuCheckboxItem>
                     ))}
-
-                    <DropdownMenuSeparator />
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel className="text-[11px] uppercase tracking-wide">
-                        {t("tasks:labels.label")}
-                      </DropdownMenuLabel>
-                    </DropdownMenuGroup>
-                    {uniqueLabels.length > 0 ? (
-                      uniqueLabels.map(
-                        (label: {
-                          id: string;
-                          name: string;
-                          color: string;
-                        }) => (
-                          <DropdownMenuCheckboxItem
-                            key={label.id}
-                            checked={isLabelGroupSelected(label)}
-                            onCheckedChange={() => toggleLabelGroup(label)}
-                            className="h-8 rounded-md text-sm"
-                          >
-                            <span
-                              className="w-3 h-3 rounded-full flex-shrink-0"
-                              style={{
-                                backgroundColor:
-                                  labelColors.find(
-                                    (c) => c.value === label.color,
-                                  )?.color || "var(--color-neutral-400)",
-                              }}
-                            />
-                            <span className="max-w-20 truncate">
-                              {label.name}
-                            </span>
-                          </DropdownMenuCheckboxItem>
-                        ),
-                      )
-                    ) : (
-                      <DropdownMenuItem
-                        disabled
-                        className="h-8 rounded-md text-sm text-muted-foreground"
-                      >
-                        <span>{t("tasks:labels.empty")}</span>
-                      </DropdownMenuItem>
-                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -689,10 +454,77 @@ function RouteComponent() {
           </div>
         </div>
 
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-2">
+          {/* biome-ignore lint/a11y/useSemanticElements: styled segmented control, not a form fieldset */}
+          <div className="flex gap-1" role="group" aria-label="Backlog section">
+            {(["planned", "blocked", "archived"] as const).map((value) => (
+              <Button
+                key={value}
+                variant={section === value ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={section === value}
+                onClick={() => setSection(value)}
+              >
+                {t(`tasks:backlog.sections.${value}`, {
+                  defaultValue:
+                    value === "archived"
+                      ? "Archive"
+                      : value === "blocked"
+                        ? "Blocked"
+                        : "Planned",
+                })}
+              </Button>
+            ))}
+          </div>
+          {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: label names the pager region as deployed */}
+          <div className="flex items-center gap-2" aria-label="Task pages">
+            <span className="text-sm text-muted-foreground">
+              {pagination
+                ? `Page ${pagination.page} of ${pagination.totalPages} · ${pagination.total} tasks`
+                : view.isPending
+                  ? "Loading…"
+                  : "Page unavailable"}
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={view.isFetching || !pagination || page <= 1}
+              onClick={() => setPageState({ scope, page: page - 1 })}
+            >
+              Previous
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={view.isFetching || !pagination?.hasMore}
+              onClick={() => setPageState({ scope, page: page + 1 })}
+            >
+              Next
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={view.isFetching}
+              onClick={() => {
+                void view.refetch();
+              }}
+            >
+              Refresh
+            </Button>
+          </div>
+        </div>
+        <p className="px-4 py-1 text-xs text-muted-foreground">
+          Selections apply to this page.
+        </p>
         <div className="flex-1 overflow-hidden bg-card h-full">
-          {sortedProject ? (
+          {view.error ? (
+            <p role="alert" className="p-4 text-destructive">
+              {view.error.message}
+            </p>
+          ) : project ? (
             <BacklogListView
-              project={sortedProject}
+              project={project}
+              sections={[section]}
               disableDragDrop={sort.field !== "position"}
             />
           ) : (

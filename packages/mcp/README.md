@@ -118,6 +118,14 @@ For headless or sandboxed environments where opening a browser is impractical, s
 - Session: `whoami`, `list_workspaces`
 - Projects: `list_projects`, `get_project`, `create_project`, `update_project`
 - Tasks: `list_tasks`, `get_task`, `create_task`, `update_task`, `move_task`, `update_task_status`
+
+Task edits, status changes and moves require `expectedVersion`, a positive integer
+from the task returned by `get_task`, `get_task_context` or `list_tasks`. Preserve
+that revision while preparing an edit. A conflict requires reloading the task and
+reconciling intended changes; do not replace the revision and blindly replay.
+These tools never substitute a newly fetched revision for the caller's snapshot.
+Moves require API capability `versionedTaskMoves`; unsupported servers reject the
+operation before a write is sent.
 - Comments: `list_task_comments`, `create_task_comment`, `update_task_comment`, `delete_task_comment`
 - Labels: `list_workspace_labels`, `create_label`, `attach_label_to_task`, `detach_label_from_task`, `delete_label`
 - Task relations: `create_task_relation`, `get_task_relations`, `delete_task_relation`

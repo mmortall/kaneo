@@ -1,14 +1,12 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, asc, eq, gt, inArray } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
-import {
-  labelTable,
-  projectTable,
-  taskTable,
-  userTable,
-} from "../../database/schema";
+import { labelTable, projectTable, taskTable } from "../../database/schema";
 
-async function exportTasks(projectId: string) {
+async function exportTasks(
+  projectId: string,
+  page?: { limit: number; cursor?: string },
+) {
   const project = await db.query.projectTable.findFirst({
     where: eq(projectTable.id, projectId),
   });
@@ -19,9 +17,12 @@ async function exportTasks(projectId: string) {
     });
   }
 
-  const tasks = await db
+  const query = db
     .select({
       id: taskTable.id,
+      version: taskTable.version,
+      projectId: taskTable.projectId,
+      workItemType: taskTable.workItemType,
       title: taskTable.title,
       number: taskTable.number,
       description: taskTable.description,
@@ -39,13 +40,18 @@ async function exportTasks(projectId: string) {
       position: taskTable.position,
       createdAt: taskTable.createdAt,
       userId: taskTable.userId,
-      assigneeName: userTable.name,
-      assigneeId: userTable.id,
     })
     .from(taskTable)
-    .leftJoin(userTable, eq(taskTable.userId, userTable.id))
-    .where(eq(taskTable.projectId, projectId))
-    .orderBy(taskTable.position);
+    .where(
+      and(
+        eq(taskTable.projectId, projectId),
+        page?.cursor ? gt(taskTable.id, page.cursor) : undefined,
+      ),
+    )
+    .orderBy(page ? asc(taskTable.id) : asc(taskTable.position));
+  const selected = await (page ? query.limit(page.limit + 1) : query);
+  const hasMore = page !== undefined && selected.length > page.limit;
+  const tasks = page ? selected.slice(0, page.limit) : selected;
 
   const taskIds = tasks.map((task) => task.id);
 
@@ -79,6 +85,14 @@ async function exportTasks(projectId: string) {
   }
 
   return {
+    ...(page
+      ? {
+          pagination: {
+            limit: page.limit,
+            nextCursor: hasMore ? (tasks[tasks.length - 1]?.id ?? null) : null,
+          },
+        }
+      : {}),
     project: {
       name: project.name,
       slug: project.slug,
@@ -86,6 +100,17 @@ async function exportTasks(projectId: string) {
       exportedAt: new Date().toISOString(),
     },
     tasks: tasks.map((task) => ({
+      ...(page
+        ? {
+            id: task.id,
+            version: task.version,
+            projectId: task.projectId,
+            number: task.number,
+            workItemType: task.workItemType,
+            position: task.position,
+            createdAt: task.createdAt,
+          }
+        : {}),
       title: task.title,
       description: task.description || "",
       goal: task.goal,
@@ -96,7 +121,7 @@ async function exportTasks(projectId: string) {
       taskCategory: task.taskCategory,
       strategyHorizons: task.strategyHorizons,
       status: task.status,
-      priority: task.priority || "low",
+      priority: page ? task.priority : task.priority || "low",
       dueDate: task.dueDate ? new Date(task.dueDate).toISOString() : null,
       startDate: task.startDate ? new Date(task.startDate).toISOString() : null,
       userId: task.userId || null,

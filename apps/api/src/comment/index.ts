@@ -65,7 +65,12 @@ const comment = new Hono<{
       const { taskId } = c.req.valid("param");
       const { content } = c.req.valid("json");
       const userId = c.get("userId");
-      const newComment = await createComment(taskId, userId, content);
+      const newComment = await createComment(
+        taskId,
+        userId,
+        content,
+        c.req.header("Idempotency-Key"),
+      );
       return c.json(newComment);
     },
   )

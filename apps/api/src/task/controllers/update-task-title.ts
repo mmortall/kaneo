@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { activityTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
-import { assertTaskMutationAllowed } from "../task-workflow-policy";
+import assertFieldMutationPolicy from "./assert-field-mutation-policy";
 
 async function updateTaskTitle({
   id,
@@ -26,7 +26,7 @@ async function updateTaskTitle({
     });
   }
 
-  assertTaskMutationAllowed({ caller, existing: existingTask });
+  await assertFieldMutationPolicy(existingTask, caller);
 
   if (existingTask.title === title) return existingTask;
 
@@ -37,12 +37,14 @@ async function updateTaskTitle({
     const [task] = await tx
       .update(taskTable)
       .set({ title })
-      .where(eq(taskTable.id, id))
+      .where(
+        and(eq(taskTable.id, id), eq(taskTable.version, existingTask.version)),
+      )
       .returning();
 
     if (!task) {
-      throw new HTTPException(500, {
-        message: "Failed to update task title",
+      throw new HTTPException(409, {
+        message: "Task changed during validation; reload before retrying",
       });
     }
 

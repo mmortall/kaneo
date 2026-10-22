@@ -1,7 +1,7 @@
 import { addDays, differenceInCalendarDays, startOfDay } from "date-fns";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
+import { useUpdateTaskFields } from "@/hooks/mutations/task/use-update-task-fields";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import type Task from "@/types/task";
@@ -58,7 +58,7 @@ export function GanttTaskBar({
   onOpenTask,
 }: GanttTaskBarProps) {
   const { t } = useTranslation();
-  const { mutateAsync: updateTask } = useUpdateTask();
+  const { mutateAsync: updateTask } = useUpdateTaskFields();
   const [dragDisplay, setDragDisplay] = useState<{
     start: Date;
     end: Date;
@@ -91,9 +91,15 @@ export function GanttTaskBar({
     async (nextStart: Date, nextEnd: Date): Promise<boolean> => {
       try {
         await updateTask({
-          ...task,
-          startDate: toIsoDay(nextStart),
-          dueDate: toIsoDay(nextEnd),
+          task: {
+            id: task.id,
+            version: task.version,
+            projectId: task.projectId,
+          },
+          fields: {
+            startDate: toIsoDay(nextStart),
+            dueDate: toIsoDay(nextEnd),
+          },
         });
         return true;
       } catch (error) {

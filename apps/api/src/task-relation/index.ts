@@ -101,6 +101,7 @@ const taskRelation = new Hono<{
         relationType,
         userId,
         workspaceId: c.get("workspaceId"),
+        idempotencyKey: c.req.header("Idempotency-Key"),
       });
       return c.json(relation);
     },

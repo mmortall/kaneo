@@ -70,7 +70,9 @@ describe("work item hierarchy guards", () => {
   it("accepts a valid hierarchy relation with no existing parent or ancestor", async () => {
     queueSelects([], []);
 
-    await expect(assertSubtaskRelationAllowed(epic, subEpic)).resolves.toBeUndefined();
+    await expect(
+      assertSubtaskRelationAllowed(epic, subEpic),
+    ).resolves.toBeUndefined();
   });
 
   it("rejects type changes that invalidate either child or parent relation", async () => {
@@ -79,17 +81,17 @@ describe("work item hierarchy guards", () => {
       [],
       [{ id: "child", workItemType: "sub_epic" }],
     );
-    await expect(assertWorkItemTypeChangeAllowed("epic", "task")).rejects.toThrow(
-      "existing child",
-    );
+    await expect(
+      assertWorkItemTypeChangeAllowed("epic", "task"),
+    ).rejects.toThrow("existing child");
 
     queueSelects(
       [],
       [{ sourceTaskId: "parent" }],
       [{ id: "parent", workItemType: "sub_epic" }],
     );
-    await expect(assertWorkItemTypeChangeAllowed("child", "epic")).rejects.toThrow(
-      "its parent",
-    );
+    await expect(
+      assertWorkItemTypeChangeAllowed("child", "epic"),
+    ).rejects.toThrow("its parent");
   });
 });

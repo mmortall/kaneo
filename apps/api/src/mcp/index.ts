@@ -4,6 +4,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { Hono } from "hono";
 import { describeRoute, resolver, validator } from "hono-openapi";
 import { auth } from "../auth";
+import { verifyApiKey } from "../utils/verify-api-key";
 import {
   beginMcpAuthorization,
   decideMcpAuthorizationRequest,
@@ -23,14 +24,18 @@ import {
 } from "./schemas";
 import { registerMcpTools } from "./tools";
 
-const apiUrl = (process.env.KANEO_API_URL || "http://localhost:1337").replace(
-  /\/api\/?$/,
-  "",
-);
+// Hosted tools run beside API. Public URL is for OAuth discovery and browser links.
+const apiUrl = (
+  process.env.KANEO_MCP_INTERNAL_API_URL || "http://127.0.0.1:1337"
+).replace(/\/api\/?$/, "");
+const publicApiUrl = (
+  process.env.KANEO_API_URL || "http://localhost:1337"
+).replace(/\/api\/?$/, "");
 
 type McpSession = {
   transport: WebStandardStreamableHTTPServerTransport;
   userId: string;
+  principalId: string;
 };
 
 const sessions = new Map<string, McpSession>();
@@ -46,19 +51,30 @@ function createMcpServerForUser(token: string): McpServer {
 
 async function validateBearerToken(
   req: Request,
-): Promise<{ userId: string; token: string } | null> {
+): Promise<{ userId: string; principalId: string; token: string } | null> {
   const authHeader = req.headers.get("authorization");
   if (!authHeader) return null;
   const match = authHeader.match(/^Bearer\s+(\S+)$/i);
   if (!match?.[1]) return null;
   const token = match[1];
+  const apiKey = await verifyApiKey(token);
+  if (apiKey?.key.userId)
+    return {
+      userId: apiKey.key.userId,
+      principalId: `key:${apiKey.key.id}`,
+      token,
+    };
 
   const headers = new Headers();
   headers.set("authorization", `Bearer ${token}`);
   const session = await auth.api.getSession({ headers });
 
   if (!session?.user?.id) return null;
-  return { userId: session.user.id, token };
+  return {
+    userId: session.user.id,
+    principalId: `session:${session.user.id}`,
+    token,
+  };
 }
 
 const mcp = new Hono();
@@ -243,17 +259,17 @@ mcp.post("/mcp/token", async (c) => {
 
 mcp.get("/.well-known/oauth-protected-resource/api/mcp", (c) =>
   c.json({
-    resource: `${apiUrl}/api/mcp`,
-    authorization_servers: [`${apiUrl}/api`],
+    resource: `${publicApiUrl}/api/mcp`,
+    authorization_servers: [`${publicApiUrl}/api`],
   }),
 );
 
 mcp.get("/.well-known/oauth-authorization-server/api", (c) =>
   c.json({
-    issuer: `${apiUrl}/api`,
-    authorization_endpoint: `${apiUrl}/api/mcp/authorize`,
-    token_endpoint: `${apiUrl}/api/mcp/token`,
-    registration_endpoint: `${apiUrl}/api/mcp/register`,
+    issuer: `${publicApiUrl}/api`,
+    authorization_endpoint: `${publicApiUrl}/api/mcp/authorize`,
+    token_endpoint: `${publicApiUrl}/api/mcp/token`,
+    registration_endpoint: `${publicApiUrl}/api/mcp/register`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code"],
     code_challenge_methods_supported: ["S256"],
@@ -264,7 +280,7 @@ mcp.get("/.well-known/oauth-authorization-server/api", (c) =>
 mcp.all("/mcp", async (c) => {
   const authResult = await validateBearerToken(c.req.raw);
   if (!authResult) {
-    const prmUrl = `${apiUrl}/api/.well-known/oauth-protected-resource/api/mcp`;
+    const prmUrl = `${publicApiUrl}/api/.well-known/oauth-protected-resource/api/mcp`;
     c.header("WWW-Authenticate", `Bearer resource_metadata="${prmUrl}"`);
     return c.json(
       {
@@ -281,7 +297,11 @@ mcp.all("/mcp", async (c) => {
     const existing = sessions.get(sessionId);
     // A mismatched owner is reported as missing rather than forbidden so the
     // response cannot confirm that someone else's session id is valid.
-    if (existing && existing.userId === authResult.userId) {
+    if (
+      existing &&
+      existing.userId === authResult.userId &&
+      existing.principalId === authResult.principalId
+    ) {
       return existing.transport.handleRequest(c.req.raw);
     }
     return c.json({ error: "Session not found" }, 404);
@@ -309,6 +329,7 @@ mcp.all("/mcp", async (c) => {
     sessions.set(transport.sessionId, {
       transport,
       userId: authResult.userId,
+      principalId: authResult.principalId,
     });
   }
 

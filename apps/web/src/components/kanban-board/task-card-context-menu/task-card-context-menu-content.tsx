@@ -13,7 +13,6 @@ import {
   ContextMenuSubTrigger,
 } from "@/components/ui/context-menu";
 import { VIRTUAL_TASK_STATUSES } from "@/constants/virtual-statuses";
-import { useUpdateTask } from "@/hooks/mutations/task/use-update-task";
 import { useUpdateTaskAssignee } from "@/hooks/mutations/task/use-update-task-assignee";
 import { useUpdateTaskDescription } from "@/hooks/mutations/task/use-update-task-description";
 import { useUpdateTaskDueDate } from "@/hooks/mutations/task/use-update-task-due-date";
@@ -77,7 +76,6 @@ export default function TaskCardContextMenuContent({
   const { data: workspaceUsers } = useGetActiveWorkspaceUsers(
     taskCardContext.worskpaceId,
   );
-  const { mutateAsync: updateTask } = useUpdateTask();
   const { mutateAsync: updateTaskPriority } = useUpdateTaskPriority();
   const { mutateAsync: updateTaskStatus } = useUpdateTaskStatus();
   const { mutateAsync: updateTaskAssignee } = useUpdateTaskAssignee();
@@ -127,17 +125,13 @@ export default function TaskCardContextMenuContent({
           });
           break;
         default:
-          await updateTask({
-            ...task,
-            [field]: value,
-          });
+          throw new Error("Unsupported task field");
       }
+      toast.success(t("tasks:update.success"));
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("tasks:update.error"),
       );
-    } finally {
-      toast.success(t("tasks:update.success"));
     }
   };
 

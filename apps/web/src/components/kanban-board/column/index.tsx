@@ -6,9 +6,10 @@ import { ColumnHeader } from "./column-header";
 type ColumnProps = {
   column: ProjectWithTasks["columns"][number];
   disableDragDrop?: boolean;
+  taskCount?: number;
 };
 
-function Column({ column, disableDragDrop = false }: ColumnProps) {
+function Column({ column, taskCount, disableDragDrop = false }: ColumnProps) {
   const [isDropzoneOver, setIsDropzoneOver] = useState(false);
 
   return (
@@ -20,9 +21,14 @@ function Column({ column, disableDragDrop = false }: ColumnProps) {
       }`}
     >
       <div className="shrink-0 border-b border-border/60 px-3 py-2">
-        <ColumnHeader column={column} />
+        <ColumnHeader column={column} taskCount={taskCount} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-2 py-1 [-webkit-overflow-scrolling:touch]">
+        {column.tasks.length === 0 && (taskCount ?? 0) > 0 && (
+          <p className="px-2 py-3 text-sm text-muted-foreground">
+            No tasks on this page.
+          </p>
+        )}
         <ColumnDropzone
           column={column}
           disableDragDrop={disableDragDrop}

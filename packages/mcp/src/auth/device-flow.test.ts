@@ -33,11 +33,14 @@ describe("requestDeviceCode", () => {
       "https://api.example.com/api/auth/device/code",
       expect.objectContaining({
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: expect.any(Headers),
         body: JSON.stringify({ client_id: "kaneo-mcp" }),
         signal: expect.any(AbortSignal),
       }),
     );
+    expect(
+      new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get("Content-Type"),
+    ).toBe("application/json");
   });
 
   it("throws when the response body is missing the device code", async () => {

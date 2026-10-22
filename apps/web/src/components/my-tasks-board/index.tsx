@@ -41,6 +41,8 @@ type MyTasksBoardProps = {
   projects: ProjectWithTasks[];
   taskCategory: TaskCategory;
   strategyHorizon?: TaskHorizon;
+  hasTasksInOtherCategories?: boolean;
+  hasTasksOutsideHorizon?: boolean;
 };
 
 export default function MyTasksBoard({
@@ -49,6 +51,8 @@ export default function MyTasksBoard({
   projects,
   taskCategory,
   strategyHorizon,
+  hasTasksInOtherCategories: completeOtherCategoryHint,
+  hasTasksOutsideHorizon: completeHorizonHint,
 }: MyTasksBoardProps) {
   const { t } = useTranslation();
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
@@ -158,18 +162,18 @@ export default function MyTasksBoard({
           </EmptyMedia>
           <EmptyTitle>
             {t(
-              strategyHorizon && hasTasksOutsideHorizon
+              strategyHorizon && (completeHorizonHint ?? hasTasksOutsideHorizon)
                 ? "tasks:myTasks.emptyHorizonTitle"
-                : hasTasksInOtherCategories
+                : (completeOtherCategoryHint ?? hasTasksInOtherCategories)
                   ? "tasks:myTasks.emptyCategoryTitle"
                   : "tasks:myTasks.emptyTitle",
             )}
           </EmptyTitle>
           <EmptyDescription>
             {t(
-              strategyHorizon && hasTasksOutsideHorizon
+              strategyHorizon && (completeHorizonHint ?? hasTasksOutsideHorizon)
                 ? "tasks:myTasks.emptyHorizonDescription"
-                : hasTasksInOtherCategories
+                : (completeOtherCategoryHint ?? hasTasksInOtherCategories)
                   ? "tasks:myTasks.emptyCategoryDescription"
                   : "tasks:myTasks.emptyDescription",
             )}

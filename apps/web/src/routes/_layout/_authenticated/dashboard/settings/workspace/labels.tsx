@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Pencil, Plus, Tag, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { LabelCataloguePager } from "@/components/common/label-catalogue-pager";
 import PageTitle from "@/components/page-title";
 import {
   AlertDialog,
@@ -42,7 +43,7 @@ import labelColors from "@/constants/label-colors";
 import useCreateLabel from "@/hooks/mutations/label/use-create-label";
 import useDeleteLabel from "@/hooks/mutations/label/use-delete-label";
 import useUpdateLabel from "@/hooks/mutations/label/use-update-label";
-import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
+import useLabelCatalogueSearch from "@/hooks/queries/label/use-label-catalogue-search";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
@@ -60,8 +61,15 @@ function RouteComponent() {
 
   const workspaceId = workspace?.id ?? "";
 
-  const { data: labels = [] } = useGetLabelsByWorkspace(workspaceId);
-  const workspaceLabels = labels.filter((label) => !label.taskId);
+  const labelSearch = useLabelCatalogueSearch(workspaceId, true, "definitions");
+  const {
+    input: searchInput,
+    setInput: setSearchInput,
+    search,
+    setPage,
+    catalogue,
+  } = labelSearch;
+  const workspaceLabels = catalogue.data?.items ?? [];
 
   const createLabel = useCreateLabel();
   const updateLabel = useUpdateLabel();
@@ -258,17 +266,48 @@ function RouteComponent() {
 
           <Card className="!rounded-none">
             <CardPanel className="p-4">
-              {workspaceLabels.length === 0 ? (
+              <Input
+                type="search"
+                aria-label={t("common:searchLabels", {
+                  defaultValue: "Search labels",
+                })}
+                placeholder={t("common:searchLabels", {
+                  defaultValue: "Search labels",
+                })}
+                value={searchInput}
+                onChange={(event) => setSearchInput(event.target.value)}
+                className="mb-4"
+              />
+              {catalogue.error ? (
+                <div role="alert" className="space-y-2">
+                  <p>{catalogue.error.message}</p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => void catalogue.refetch()}
+                  >
+                    {t("common:retry", { defaultValue: "Retry" })}
+                  </Button>
+                </div>
+              ) : catalogue.isPending ? (
+                <p role="status">
+                  {t("common:loading", { defaultValue: "Loading…" })}
+                </p>
+              ) : workspaceLabels.length === 0 ? (
                 <Empty>
                   <EmptyHeader>
                     <EmptyMedia>
                       <Tag className="size-8 text-muted-foreground" />
                     </EmptyMedia>
                     <EmptyTitle>
-                      {t("settings:workspaceLabels.empty", {
-                        defaultValue:
-                          "No labels yet. Create your first label to get started.",
-                      })}
+                      {search
+                        ? t("common:noLabelsFound", {
+                            defaultValue: "No matching labels",
+                          })
+                        : t("settings:workspaceLabels.empty", {
+                            defaultValue:
+                              "No labels yet. Create your first label to get started.",
+                          })}
                     </EmptyTitle>
                     <EmptyDescription />
                   </EmptyHeader>
@@ -332,6 +371,11 @@ function RouteComponent() {
                   ))}
                 </div>
               )}
+              <LabelCataloguePager
+                pagination={catalogue.data?.pagination}
+                busy={labelSearch.busy}
+                onPage={setPage}
+              />
             </CardPanel>
           </Card>
         </CardFrame>

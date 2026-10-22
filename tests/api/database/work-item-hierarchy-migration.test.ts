@@ -12,12 +12,14 @@ const migration = readFileSync(
 describe("work item hierarchy migration", () => {
   it("adds safe default, legacy backfill, type constraint, and single-parent index", () => {
     expect(migration).toContain(
-      'ADD COLUMN "work_item_type" text DEFAULT \'task\' NOT NULL',
+      "ADD COLUMN \"work_item_type\" text DEFAULT 'task' NOT NULL",
     );
     expect(migration).toContain('WHEN "description" LIKE \'%"level":"epic"%\'');
-    expect(migration).toContain('WHEN "description" LIKE \'%"level":"sub-epic"%\'');
+    expect(migration).toContain(
+      'WHEN "description" LIKE \'%"level":"sub-epic"%\'',
+    );
     expect(migration).toContain("IN ('task', 'epic', 'sub_epic')");
-    expect(migration).toContain('WHERE "relation_type" = \'subtask\'');
+    expect(migration).toContain("WHERE \"relation_type\" = 'subtask'");
   });
 
   it("has a journal entry for every migration file and no dangling entries", () => {
@@ -31,9 +33,7 @@ describe("work item hierarchy migration", () => {
       ),
     ) as { entries: Array<{ tag: string }> };
     const migrationFiles = new Set(
-      readdirSync(
-        new URL("../../../apps/api/drizzle/", import.meta.url),
-      )
+      readdirSync(new URL("../../../apps/api/drizzle/", import.meta.url))
         .filter((file) => file.endsWith(".sql"))
         .map((file) => file.slice(0, -4)),
     );
@@ -41,8 +41,8 @@ describe("work item hierarchy migration", () => {
     expect(journal.entries.map((entry) => entry.tag)).toEqual(
       expect.arrayContaining([...migrationFiles]),
     );
-    expect(journal.entries.every((entry) => migrationFiles.has(entry.tag))).toBe(
-      true,
-    );
+    expect(
+      journal.entries.every((entry) => migrationFiles.has(entry.tag)),
+    ).toBe(true);
   });
 });

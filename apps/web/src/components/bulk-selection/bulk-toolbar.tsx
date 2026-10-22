@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { LabelCataloguePager } from "@/components/common/label-catalogue-pager";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -23,6 +24,7 @@ import {
   CommandDialog,
   CommandDialogPopup,
   CommandEmpty,
+  CommandFooter,
   CommandGroup,
   CommandGroupLabel,
   CommandInput,
@@ -39,7 +41,7 @@ import {
 import labelColors from "@/constants/label-colors";
 import { VIRTUAL_TASK_STATUSES } from "@/constants/virtual-statuses";
 import { useBulkOperations } from "@/hooks/mutations/task/use-bulk-operations";
-import useGetLabelsByWorkspace from "@/hooks/queries/label/use-get-labels-by-workspace";
+import useLabelCatalogueSearch from "@/hooks/queries/label/use-label-catalogue-search";
 import useActiveWorkspace from "@/hooks/queries/workspace/use-active-workspace";
 import { useGetActiveWorkspaceUsers } from "@/hooks/queries/workspace-users/use-get-active-workspace-users";
 import { useWorkspacePermission } from "@/hooks/use-workspace-permission";
@@ -58,6 +60,7 @@ type BulkActionItem = {
   label: string;
   icon?: ReactNode;
   onRun: () => void;
+  disabled?: boolean;
 };
 
 type BulkActionGroup = {
@@ -96,9 +99,6 @@ function BulkToolbar() {
   const { data: workspaceUsers } = useGetActiveWorkspaceUsers(
     workspace?.id ?? "",
   );
-  const { data: workspaceLabels = [] } = useGetLabelsByWorkspace(
-    workspace?.id ?? "",
-  );
   const { canManageTasks, canAssignTasks } = useWorkspacePermission();
   const canEdit = canManageTasks();
   const canAssign = canAssignTasks();
@@ -106,12 +106,17 @@ function BulkToolbar() {
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
   const selectedCount = selectedTaskIds.size;
+  const labelSearch = useLabelCatalogueSearch(
+    workspace?.id ?? "",
+    isActionsOpen && canEdit && selectedCount > 0,
+  );
+  const workspaceLabels = labelSearch.catalogue.data?.items ?? [];
 
   const uniqueLabels = useMemo(() => {
     const labelMap = new Map<string, (typeof workspaceLabels)[0]>();
     for (const label of workspaceLabels) {
       const existing = labelMap.get(label.name);
-      if (!existing || (label.taskId === null && existing.taskId !== null)) {
+      if (!existing || (label.isWorkspaceLabel && !existing.isWorkspaceLabel)) {
         labelMap.set(label.name, label);
       }
     }
@@ -358,6 +363,7 @@ function BulkToolbar() {
         label: t("tasks:bulk.addLabel"),
         items: uniqueLabels.map((label) => ({
           value: `label-${label.id}`,
+          disabled: labelSearch.busy,
           label: label.name,
           icon: (
             <span
@@ -382,6 +388,7 @@ function BulkToolbar() {
     project?.columns,
     workspaceUsers?.members,
     uniqueLabels,
+    labelSearch.busy,
     handleBulkDelete,
     handleBulkArchive,
     handleBulkChangeStatus,
@@ -477,7 +484,11 @@ function BulkToolbar() {
 
       <CommandDialog open={isActionsOpen} onOpenChange={setIsActionsOpen}>
         <CommandDialogPopup instant>
-          <Command items={groupedItems}>
+          <Command
+            items={groupedItems}
+            value={labelSearch.input}
+            onValueChange={labelSearch.setInput}
+          >
             <CommandInput placeholder={t("tasks:bulk.searchActions")} />
             <CommandPanel>
               <CommandEmpty>{t("tasks:bulk.noActionsFound")}</CommandEmpty>
@@ -491,6 +502,7 @@ function BulkToolbar() {
                           <CommandItem
                             key={item.value}
                             value={item.value}
+                            disabled={item.disabled}
                             onClick={item.onRun}
                             className="gap-1.5 px-3"
                           >
@@ -507,6 +519,33 @@ function BulkToolbar() {
                 )}
               </CommandList>
             </CommandPanel>
+            {canEdit && (
+              <CommandFooter className="flex-col items-stretch">
+                {labelSearch.catalogue.error && (
+                  <div role="alert">
+                    <p>{labelSearch.catalogue.error.message}</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void labelSearch.catalogue.refetch()}
+                    >
+                      {t("common:retry", { defaultValue: "Retry" })}
+                    </Button>
+                  </div>
+                )}
+                {labelSearch.busy && (
+                  <p role="status">
+                    {t("common:loading", { defaultValue: "Loading…" })}
+                  </p>
+                )}
+                <LabelCataloguePager
+                  pagination={labelSearch.catalogue.data?.pagination}
+                  busy={labelSearch.busy}
+                  onPage={labelSearch.setPage}
+                />
+              </CommandFooter>
+            )}
           </Command>
         </CommandDialogPopup>
       </CommandDialog>

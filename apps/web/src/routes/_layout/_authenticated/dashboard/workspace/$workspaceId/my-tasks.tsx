@@ -1,13 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ListChecks, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import WorkspaceLayout from "@/components/common/workspace-layout";
 import MyTasksBoard from "@/components/my-tasks-board";
-import {
-  countMyTasks,
-  countToDoByCategory,
-  type MyTask,
-} from "@/components/my-tasks-board/model";
+import type { MyTask } from "@/components/my-tasks-board/model";
 import PageTitle from "@/components/page-title";
 import TaskDetailsSheet from "@/components/task/task-details-sheet";
 import { Badge } from "@/components/ui/badge";
@@ -64,12 +61,32 @@ function RouteComponent() {
   } = Route.useSearch();
   const navigate = useNavigate();
   const { data: session } = authClient.useSession();
+  const [page, setPage] = useState(1);
+  const filterKey = JSON.stringify([
+    workspaceId,
+    session?.user.id,
+    category,
+    horizon,
+  ]);
+  const [pageFilterKey, setPageFilterKey] = useState(filterKey);
+  const requestedPage = pageFilterKey === filterKey ? page : 1;
+  useEffect(() => {
+    setPage(1);
+    setPageFilterKey(filterKey);
+  }, [filterKey]);
   const {
     data: projects,
     isError,
     isLoading,
     refetch,
-  } = useGetMyTasks(workspaceId, session?.user.id);
+    counts,
+    pagination,
+    isFetching,
+  } = useGetMyTasks(workspaceId, session?.user.id, {
+    page: requestedPage,
+    category,
+    horizon,
+  });
 
   const openTask = (task: MyTask) => {
     navigate({
@@ -94,8 +111,12 @@ function RouteComponent() {
     });
   };
 
-  const taskCount = countMyTasks(projects, horizon);
-  const toDoCounts = countToDoByCategory(projects, horizon);
+  const taskCount = counts?.allCategoriesTotal ?? 0;
+  const toDoCounts = counts?.todoByCategory ?? {
+    live_implementation: 0,
+    research: 0,
+    agent_blocker: 0,
+  };
 
   return (
     <WorkspaceLayout title={t("tasks:myTasks.title")}>
@@ -110,7 +131,7 @@ function RouteComponent() {
               <p className="truncate text-xs text-muted-foreground">
                 {t("tasks:myTasks.summary", {
                   count: taskCount,
-                  projectCount: projects.length,
+                  projectCount: counts?.projectCount ?? 0,
                 })}
               </p>
             </div>
@@ -217,9 +238,39 @@ function RouteComponent() {
               strategyHorizon={horizon}
               onOpenTask={openTask}
               onBrowseProjects={browseProjects}
+              hasTasksInOtherCategories={(counts?.allCategoriesTotal ?? 0) > 0}
+              hasTasksOutsideHorizon={
+                (counts?.categoryAllHorizonsTotal ?? 0) > 0
+              }
             />
           )}
         </div>
+        <nav
+          aria-label={t("common:pagination.label")}
+          className="flex shrink-0 items-center justify-between border-t p-2"
+        >
+          <Button
+            size="xs"
+            variant="ghost"
+            aria-label={t("common:pagination.previousPage")}
+            disabled={isFetching || requestedPage === 1}
+            onClick={() => setPage((value) => value - 1)}
+          >
+            {t("common:pagination.previous")}
+          </Button>
+          <span className="text-xs text-muted-foreground" aria-live="polite">
+            {requestedPage} / {pagination?.totalPages ?? 1}
+          </span>
+          <Button
+            size="xs"
+            variant="ghost"
+            aria-label={t("common:pagination.nextPage")}
+            disabled={isFetching || !pagination?.hasMore}
+            onClick={() => setPage((value) => value + 1)}
+          >
+            {t("common:pagination.next")}
+          </Button>
+        </nav>
       </div>
 
       {projectId && (

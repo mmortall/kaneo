@@ -1,43 +1,25 @@
-import { useQueries } from "@tanstack/react-query";
-import { useMemo } from "react";
-import getTasks from "@/fetchers/task/get-tasks";
-import useGetProjects from "@/hooks/queries/project/use-get-projects";
-import type { ProjectWithTasks } from "@/types/project";
+import { useQuery } from "@tanstack/react-query";
+import getMyTaskView, {
+  type MyTaskViewRequest,
+} from "@/fetchers/task/get-my-task-view";
 
-export function useGetMyTasks(workspaceId: string, userId?: string) {
-  const projectsQuery = useGetProjects({ workspaceId });
-  const projects = projectsQuery.data ?? [];
-
-  const taskQueries = useQueries({
-    queries: projects.map((project) => ({
-      queryKey: ["tasks", project.id, { assigneeId: userId }],
-      queryFn: () => getTasks(project.id, { assigneeId: userId }),
-      enabled: Boolean(project.id && userId),
-      refetchInterval: 30000,
-    })),
+export function useGetMyTasks(
+  workspaceId: string,
+  userId: string | undefined,
+  options: MyTaskViewRequest,
+) {
+  const query = useQuery({
+    queryKey: ["tasks", "my", workspaceId, userId, options],
+    queryFn: ({ signal }) => getMyTaskView(workspaceId, options, signal),
+    enabled: Boolean(workspaceId && userId),
+    retry: false,
+    staleTime: 10_000,
   });
-
-  const data = useMemo(
-    () =>
-      taskQueries.flatMap((query) =>
-        query.data ? [query.data as ProjectWithTasks] : [],
-      ),
-    [taskQueries],
-  );
-
   return {
-    data,
-    isError:
-      projectsQuery.isError || taskQueries.some((query) => query.isError),
-    isLoading:
-      !userId ||
-      projectsQuery.isLoading ||
-      (projects.length > 0 && taskQueries.some((query) => query.isLoading)),
-    refetch: async () => {
-      await Promise.all([
-        projectsQuery.refetch(),
-        ...taskQueries.map((query) => query.refetch()),
-      ]);
-    },
+    ...query,
+    data: query.data?.projects ?? [],
+    counts: query.data?.counts,
+    pagination: query.data?.pagination,
+    isLoading: !userId || query.isLoading,
   };
 }

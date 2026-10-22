@@ -1,4 +1,15 @@
-import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNotNull,
+  isNull,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import db from "../../database";
 import {
   activityTable,
@@ -23,6 +34,7 @@ type SearchParams = {
   workspaceId?: string;
   projectId?: string;
   limit?: number;
+  taskArchive?: "active" | "archived" | "all";
 };
 
 type SearchResult = {
@@ -98,6 +110,7 @@ async function globalSearch(params: SearchParams): Promise<{
   results: SearchResult[];
   totalCount: number;
   searchQuery: string;
+  taskArchive: "active" | "archived" | "all";
 }> {
   const {
     query,
@@ -107,6 +120,7 @@ async function globalSearch(params: SearchParams): Promise<{
     workspaceId,
     projectId,
     limit = 20,
+    taskArchive = "active",
   } = params;
 
   let resolvedUserId = userId;
@@ -123,7 +137,7 @@ async function globalSearch(params: SearchParams): Promise<{
   }
 
   if (!resolvedUserId) {
-    return { results: [], totalCount: 0, searchQuery: query };
+    return { results: [], totalCount: 0, searchQuery: query, taskArchive };
   }
 
   const userWorkspaces = await db
@@ -136,7 +150,7 @@ async function globalSearch(params: SearchParams): Promise<{
     .filter(Boolean);
 
   if (accessibleWorkspaceIds.length === 0) {
-    return { results: [], totalCount: 0, searchQuery: query };
+    return { results: [], totalCount: 0, searchQuery: query, taskArchive };
   }
 
   const results: SearchResult[] = [];
@@ -145,6 +159,19 @@ async function globalSearch(params: SearchParams): Promise<{
   const workspaceFilter = workspaceId
     ? eq(projectTable.workspaceId, workspaceId)
     : inArray(projectTable.workspaceId, accessibleWorkspaceIds);
+
+  const taskArchiveFilter =
+    taskArchive === "archived"
+      ? or(eq(taskTable.status, "archived"), isNotNull(projectTable.archivedAt))
+      : taskArchive === "active"
+        ? and(ne(taskTable.status, "archived"), isNull(projectTable.archivedAt))
+        : undefined;
+  const projectArchiveFilter =
+    taskArchive === "archived"
+      ? isNotNull(projectTable.archivedAt)
+      : taskArchive === "active"
+        ? isNull(projectTable.archivedAt)
+        : undefined;
 
   // Check if query matches short-id pattern (e.g. "DEP-23")
   const shortIdMatch = query.match(/^([A-Za-z][\w-]*)-(\d+)$/);
@@ -185,6 +212,7 @@ async function globalSearch(params: SearchParams): Promise<{
         .where(
           and(
             workspaceFilter,
+            taskArchiveFilter,
             projectId ? eq(taskTable.projectId, projectId) : undefined,
             ilike(projectTable.slug, slug),
             eq(taskTable.number, taskNumber),
@@ -215,51 +243,81 @@ async function globalSearch(params: SearchParams): Promise<{
       }
     }
 
-    // Also run text search for tasks
-    const taskRelevanceScore = sql<number>`
-      CASE
-        WHEN LOWER(${taskTable.title}) LIKE ${searchPattern} THEN 3
-        WHEN LOWER(${taskTable.description}) LIKE ${searchPattern} THEN 2
-        ELSE 1
-      END
-    `;
-
-    const taskQuery = db
+    // Keep active project scope outside this subquery so text search uses project indexes.
+    // Placeholder retains OFFSET: numeric zero is omitted by Drizzle's dialect.
+    const searchTasks = db
       .select({
         id: taskTable.id,
         title: taskTable.title,
         description: taskTable.description,
         projectId: taskTable.projectId,
-        projectName: projectTable.name,
-        projectSlug: projectTable.slug,
-        workspaceId: projectTable.workspaceId,
-        workspaceName: workspaceTable.name,
         userId: taskTable.userId,
-        userName: userTable.name,
         createdAt: taskTable.createdAt,
-        taskNumber: taskTable.number,
+        number: taskTable.number,
         priority: taskTable.priority,
         status: taskTable.status,
-        relevanceScore: taskRelevanceScore.as("relevanceScore"),
       })
       .from(taskTable)
-      .leftJoin(projectTable, eq(taskTable.projectId, projectTable.id))
+      .where(eq(taskTable.projectId, projectTable.id))
+      .offset(sql.placeholder("searchOffset"))
+      .as("search_tasks");
+    const textTask = taskArchive === "active" ? searchTasks : taskTable;
+
+    // Also run text search for tasks
+    const taskRelevanceScore = sql<number>`
+      CASE
+        WHEN LOWER(${textTask.title}) LIKE ${searchPattern} THEN 3
+        WHEN LOWER(${textTask.description}) LIKE ${searchPattern} THEN 2
+        ELSE 1
+      END
+    `;
+
+    const taskSelect = db.select({
+      id: textTask.id,
+      title: textTask.title,
+      description: textTask.description,
+      projectId: textTask.projectId,
+      projectName: projectTable.name,
+      projectSlug: projectTable.slug,
+      workspaceId: projectTable.workspaceId,
+      workspaceName: workspaceTable.name,
+      userId: textTask.userId,
+      userName: userTable.name,
+      createdAt: textTask.createdAt,
+      taskNumber: textTask.number,
+      priority: textTask.priority,
+      status: textTask.status,
+      relevanceScore: taskRelevanceScore.as("relevanceScore"),
+    });
+    const taskFrom =
+      taskArchive === "active"
+        ? taskSelect.from(projectTable).innerJoinLateral(searchTasks, sql`true`)
+        : taskSelect
+            .from(taskTable)
+            .leftJoin(projectTable, eq(taskTable.projectId, projectTable.id));
+    const taskQuery = taskFrom
       .leftJoin(workspaceTable, eq(projectTable.workspaceId, workspaceTable.id))
-      .leftJoin(userTable, eq(taskTable.userId, userTable.id))
+      .leftJoin(userTable, eq(textTask.userId, userTable.id))
       .where(
         and(
           workspaceFilter,
-          projectId ? eq(taskTable.projectId, projectId) : undefined,
+          taskArchive === "active"
+            ? and(
+                ne(textTask.status, "archived"),
+                isNull(projectTable.archivedAt),
+              )
+            : taskArchiveFilter,
+          projectId ? eq(textTask.projectId, projectId) : undefined,
           or(
-            ilike(taskTable.title, searchPattern),
-            ilike(taskTable.description, searchPattern),
+            ilike(textTask.title, searchPattern),
+            ilike(textTask.description, searchPattern),
           ),
         ),
       )
-      .orderBy(desc(taskRelevanceScore), desc(taskTable.createdAt))
+      .orderBy(desc(taskRelevanceScore), desc(textTask.createdAt))
       .limit(limit);
 
-    const tasks = await taskQuery;
+    const tasks = await taskQuery.prepare("").execute({ searchOffset: 0 });
 
     for (const task of tasks) {
       if (seenTaskIds.has(task.id)) continue;
@@ -309,6 +367,7 @@ async function globalSearch(params: SearchParams): Promise<{
       .where(
         and(
           workspaceFilter,
+          projectArchiveFilter,
           or(
             ilike(projectTable.name, searchPattern),
             ilike(projectTable.description, searchPattern),
@@ -423,6 +482,7 @@ async function globalSearch(params: SearchParams): Promise<{
       .where(
         and(
           workspaceFilter,
+          taskArchiveFilter,
           projectId ? eq(taskTable.projectId, projectId) : undefined,
           or(
             ilike(searchableActivityText, searchPattern),
@@ -477,6 +537,7 @@ async function globalSearch(params: SearchParams): Promise<{
     results: finalResults,
     totalCount: results.length,
     searchQuery: query,
+    taskArchive,
   };
 }
 

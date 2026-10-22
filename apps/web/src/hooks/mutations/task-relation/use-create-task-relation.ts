@@ -13,6 +13,13 @@ function useCreateTaskRelation() {
       queryClient.invalidateQueries({
         queryKey: ["task-relations", variables.targetTaskId],
       });
+      queryClient.invalidateQueries({
+        queryKey: ["task", variables.sourceTaskId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["task", variables.targetTaskId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
   });
 }

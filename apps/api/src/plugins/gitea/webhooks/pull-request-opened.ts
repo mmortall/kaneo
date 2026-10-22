@@ -5,7 +5,6 @@ import {
 } from "../../github/services/link-manager";
 import {
   findTaskByNumber,
-  isTaskInFinalState,
   updateTaskStatus,
 } from "../../github/services/task-service";
 import type { GiteaConfig } from "../config";
@@ -124,25 +123,24 @@ export async function handleGiteaPullRequestOpened(
       config.statusTransitions?.onPROpen || "in-review",
     );
 
-    const isTaskFinal = await isTaskInFinalState(task);
-
-    if (task.status !== targetStatus && !isTaskFinal) {
-      const statusResult = await updateTaskStatus(task.id, targetStatus);
-      if (
-        statusResult.applied &&
-        statusResult.before.status !== statusResult.after.status
-      ) {
-        await publishEvent("task.status_changed", {
-          taskId: statusResult.after.id,
-          projectId: statusResult.after.projectId,
-          userId: null,
-          oldStatus: statusResult.before.status,
-          newStatus: statusResult.after.status,
-          title: statusResult.after.title,
-          assigneeId: statusResult.after.userId,
-          type: "status_changed",
-        });
-      }
+    const statusResult = await updateTaskStatus(task.id, targetStatus, {
+      onlyIfNotFinal: true,
+      expectedProjectId: integration.projectId,
+    });
+    if (
+      statusResult.applied &&
+      statusResult.before.status !== statusResult.after.status
+    ) {
+      await publishEvent("task.status_changed", {
+        taskId: statusResult.after.id,
+        projectId: statusResult.after.projectId,
+        userId: null,
+        oldStatus: statusResult.before.status,
+        newStatus: statusResult.after.status,
+        title: statusResult.after.title,
+        assigneeId: statusResult.after.userId,
+        type: "status_changed",
+      });
     }
 
     return;

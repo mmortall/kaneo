@@ -11,9 +11,22 @@ const { version: packageVersion } = require("../package.json") as {
 };
 
 export function createMcpServer(): McpServer {
-  const baseUrl = normalizeBaseUrl(
-    process.env.KANEO_API_URL || "http://localhost:1337",
-  );
+  const local = process.env.KANEO_TRANSPORT === "local";
+  const endpoint = local
+    ? process.env.KANEO_LOCAL_API_ENDPOINT || "http://127.0.0.1:5180/kaneo/api"
+    : process.env.KANEO_API_URL || "http://localhost:1337";
+  if (local) {
+    const target = new URL(endpoint);
+    if (
+      target.protocol !== "http:" ||
+      !["localhost", "127.0.0.1", "[::1]"].includes(target.hostname) ||
+      target.username ||
+      target.password
+    ) {
+      throw new Error("Local Kaneo endpoint must be an HTTP loopback URL");
+    }
+  }
+  const baseUrl = normalizeBaseUrl(endpoint);
   const clientId = process.env.KANEO_MCP_CLIENT_ID || "kaneo-mcp";
   const apiKey = process.env.KANEO_API_KEY || undefined;
   const auth = new AuthService({ baseUrl, clientId, apiKey });

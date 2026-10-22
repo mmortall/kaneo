@@ -1,6 +1,7 @@
 import { Filter, PanelsTopLeft, Rows3, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import LabelFilterPicker from "@/components/common/label-filter-picker";
 import SortControl from "@/components/common/sort-control";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -15,7 +16,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/menu";
-import labelColors from "@/constants/label-colors";
 import {
   type BoardFilters,
   DUE_DATE_FILTER_VALUES,
@@ -26,12 +26,6 @@ import { getPriorityLabel } from "@/lib/i18n/domain";
 import { getPriorityIcon } from "@/lib/priority";
 import type { SortConfig } from "@/lib/sort-tasks";
 import type { ProjectWithTasks } from "@/types/project";
-
-type WorkspaceLabel = {
-  id: string;
-  name: string;
-  color: string;
-};
 
 type ActiveUsers = {
   members?: Array<{
@@ -50,11 +44,10 @@ type BoardToolbarProps = {
     key: keyof BoardFilters,
     value: BoardFilters[keyof BoardFilters],
   ) => void;
-  updateLabelFilter: (labelId: string) => void;
   clearFilters: () => void;
   hasActiveFilters: boolean;
   users?: ActiveUsers;
-  workspaceLabels: WorkspaceLabel[];
+  workspaceId: string;
   viewMode: "board" | "list";
   setViewMode: (mode: "board" | "list") => void;
   sort: SortConfig;
@@ -134,11 +127,10 @@ export default function BoardToolbar({
   project,
   filters,
   updateFilter,
-  updateLabelFilter,
   clearFilters,
   hasActiveFilters,
   users,
-  workspaceLabels,
+  workspaceId,
   viewMode,
   setViewMode,
   sort,
@@ -181,23 +173,6 @@ export default function BoardToolbar({
     );
   };
 
-  const uniqueLabels = workspaceLabels.reduce(
-    (acc: WorkspaceLabel[], label: WorkspaceLabel) => {
-      const existing = acc.find(
-        (l) => l.name === label.name && l.color === label.color,
-      );
-      if (!existing) acc.push(label);
-      return acc;
-    },
-    [],
-  );
-
-  const isLabelGroupSelected = (label: { name: string; color: string }) => {
-    return workspaceLabels
-      .filter((l) => l.name === label.name && l.color === label.color)
-      .some((l) => filters.labels?.includes(l.id));
-  };
-
   const toggleStatusFilter = (statusId: string) => {
     const exists = selectedStatusIds.includes(statusId);
     const next = exists
@@ -230,26 +205,7 @@ export default function BoardToolbar({
     updateFilter("dueDate", next.length > 0 ? next : null);
   };
 
-  const toggleLabelGroup = (label: { name: string; color: string }) => {
-    const matching = workspaceLabels.filter(
-      (l) => l.name === label.name && l.color === label.color,
-    );
-    const anySelected = matching.some((l) => filters.labels?.includes(l.id));
-
-    for (const l of matching) {
-      if (
-        (anySelected && filters.labels?.includes(l.id)) ||
-        (!anySelected && !filters.labels?.includes(l.id))
-      ) {
-        updateLabelFilter(l.id);
-      }
-    }
-  };
-
-  const clearLabelFilters = () => {
-    if (!filters.labels || filters.labels.length === 0) return;
-    for (const labelId of filters.labels) updateLabelFilter(labelId);
-  };
+  const clearLabelFilters = () => updateFilter("labels", null);
 
   return (
     <div className="border-border/80 border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/70">
@@ -467,53 +423,6 @@ export default function BoardToolbar({
                   </DropdownMenuSubContent>
                 </DropdownMenuSub>
 
-                <DropdownMenuSub>
-                  <DropdownMenuSubTrigger className="h-8 rounded-md text-sm">
-                    {t("tasks:properties.labels")}
-                  </DropdownMenuSubTrigger>
-                  <DropdownMenuSubContent className="w-64">
-                    <DropdownMenuItem
-                      onClick={clearLabelFilters}
-                      className="h-8 rounded-md text-sm"
-                    >
-                      <CheckSlot
-                        checked={!filters.labels || filters.labels.length === 0}
-                      />
-                      {t("tasks:boardFilters.allLabels")}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    {uniqueLabels.length > 0 ? (
-                      uniqueLabels.map((label) => (
-                        <DropdownMenuItem
-                          key={label.id}
-                          onClick={() => toggleLabelGroup(label)}
-                          className="h-8 rounded-md text-sm"
-                        >
-                          <CheckSlot checked={isLabelGroupSelected(label)} />
-                          <span
-                            className="h-2.5 w-2.5 shrink-0 rounded-full"
-                            style={{
-                              backgroundColor:
-                                labelColors.find((c) => c.value === label.color)
-                                  ?.color || "var(--color-neutral-400)",
-                            }}
-                          />
-                          <span className="max-w-20 truncate">
-                            {label.name}
-                          </span>
-                        </DropdownMenuItem>
-                      ))
-                    ) : (
-                      <DropdownMenuItem
-                        disabled
-                        className="h-8 rounded-md text-sm text-muted-foreground"
-                      >
-                        {t("tasks:labels.empty")}
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuSubContent>
-                </DropdownMenuSub>
-
                 {hasActiveFilters && (
                   <>
                     <DropdownMenuSeparator />
@@ -528,6 +437,11 @@ export default function BoardToolbar({
               </DropdownMenuContent>
             </DropdownMenu>
 
+            <LabelFilterPicker
+              workspaceId={workspaceId}
+              selected={filters.labels ?? []}
+              onChange={(values) => updateFilter("labels", values)}
+            />
             <SortControl sort={sort} onSortChange={onSortChange} />
 
             {selectedStatusIds.length > 0 && (

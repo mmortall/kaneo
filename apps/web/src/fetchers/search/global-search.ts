@@ -12,17 +12,22 @@ type SearchParams = {
   workspaceId?: string;
   projectId?: string;
   limit?: number;
+  taskArchive?: "active" | "archived" | "all";
 };
 
-async function globalSearch(params: SearchParams) {
+async function globalSearch(params: SearchParams, signal?: AbortSignal) {
   const queryParams = {
     ...params,
+    taskArchive: params.taskArchive ?? "active",
     limit: params.limit?.toString(),
   };
 
-  const response = await client.search.$get({
-    query: queryParams,
-  });
+  const response = await client.search.$get(
+    {
+      query: queryParams,
+    },
+    { init: { signal } },
+  );
 
   if (!response.ok) {
     const error = await response.text();
@@ -31,6 +36,11 @@ async function globalSearch(params: SearchParams) {
 
   const data = await response.json();
 
+  if (data.taskArchive !== (params.taskArchive ?? "active")) {
+    throw new Error(
+      "Server does not support archive-scoped search. Reload after upgrading Kaneo.",
+    );
+  }
   return data;
 }
 

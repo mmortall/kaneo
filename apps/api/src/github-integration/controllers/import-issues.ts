@@ -4,10 +4,10 @@ import db from "../../database";
 import {
   activityTable,
   integrationTable,
-  labelTable,
   projectTable,
   taskTable,
 } from "../../database/schema";
+import importTaskLabels from "../../label/controllers/import-task-labels";
 import type { GitHubConfig } from "../../plugins/github/config";
 import {
   createExternalLink,
@@ -300,39 +300,7 @@ async function importLabelsForTask(
         !label.name.startsWith("status:"),
     ) as Array<{ name: string; color: string }>;
 
-  for (const labelData of nonSystemLabels) {
-    const existingLabelOnTask = await db.query.labelTable.findFirst({
-      where: and(
-        eq(labelTable.taskId, taskId),
-        eq(labelTable.name, labelData.name),
-      ),
-    });
-
-    if (existingLabelOnTask) {
-      continue;
-    }
-
-    const existingWorkspaceLabel = await db.query.labelTable.findFirst({
-      where: and(
-        eq(labelTable.workspaceId, workspaceId),
-        eq(labelTable.name, labelData.name),
-      ),
-    });
-
-    const colorToUse = existingWorkspaceLabel?.color || labelData.color;
-
-    await db
-      .insert(labelTable)
-      .values({
-        name: labelData.name,
-        color: colorToUse,
-        taskId,
-        workspaceId,
-      })
-      .onConflictDoNothing({
-        target: [labelTable.taskId, labelTable.name],
-      });
-  }
+  await importTaskLabels(taskId, workspaceId, nonSystemLabels, "append");
 }
 
 async function importCommentsForTask(

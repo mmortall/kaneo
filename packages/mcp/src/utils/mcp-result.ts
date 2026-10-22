@@ -14,6 +14,9 @@ export function textResult(data: unknown, isError = false): CallToolResult {
   };
 }
 
-export function errorResult(message: string): CallToolResult {
-  return textResult({ error: message }, true);
+export function errorResult(
+  message: string,
+  diagnostics?: unknown,
+): CallToolResult {
+  return textResult({ error: message, diagnostics }, true);
 }

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import moveTask from "@/fetchers/task/move-task";
+import { TaskConflictError } from "@/fetchers/task/update-task";
 import { toast } from "@/lib/toast";
 
 export function useMoveTask() {
@@ -10,6 +11,7 @@ export function useMoveTask() {
   return useMutation({
     mutationFn: moveTask,
     onSuccess: (result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", "my"] });
       toast.success(t("tasks:move.success"));
       queryClient.invalidateQueries({
         queryKey: ["task", variables.taskId],
@@ -30,7 +32,11 @@ export function useMoveTask() {
         queryKey: ["notifications"],
       });
     },
-    onError: (error) => {
+    onError: (error, variables) => {
+      if (error instanceof TaskConflictError) {
+        queryClient.invalidateQueries({ queryKey: ["task", variables.taskId] });
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      }
       toast.error(
         error instanceof Error ? error.message : t("tasks:move.error"),
       );

@@ -34,6 +34,7 @@ async function getTaskRelations(taskId: string, workspaceId: string) {
     string,
     {
       id: string;
+      version: number;
       title: string;
       status: string;
       priority: string | null;
@@ -49,6 +50,7 @@ async function getTaskRelations(taskId: string, workspaceId: string) {
     const taskRows = await db
       .select({
         id: taskTable.id,
+        version: taskTable.version,
         title: taskTable.title,
         status: taskTable.status,
         priority: taskTable.priority,

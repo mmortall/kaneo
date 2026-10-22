@@ -3,7 +3,6 @@ import { ArrowRightLeft } from "lucide-react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { VIRTUAL_TASK_STATUSES } from "@/constants/virtual-statuses";
 import { Label } from "@/components/ui/label";
 import {
   Popover,
@@ -17,9 +16,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { VIRTUAL_TASK_STATUSES } from "@/constants/virtual-statuses";
 import { useMoveTask } from "@/hooks/mutations/task/use-move-task";
+import { useGetColumns } from "@/hooks/queries/column/use-get-columns";
 import useGetProjects from "@/hooks/queries/project/use-get-projects";
-import { useGetTasks } from "@/hooks/queries/task/use-get-tasks";
 import { cn } from "@/lib/cn";
 import { getStatusLabel } from "@/lib/i18n/domain";
 import type Task from "@/types/task";
@@ -45,10 +45,10 @@ export default function TaskMovePopover({
   const { mutateAsync: moveTask, isPending: isMovePending } = useMoveTask();
   const destinationProjectId = selectedProjectId || "";
   const {
-    data: destinationProject,
+    data: destinationColumnRows = [],
     isLoading: isProjectLoading,
     isError: isProjectError,
-  } = useGetTasks(destinationProjectId);
+  } = useGetColumns(destinationProjectId);
 
   const destinationProjects = useMemo(
     () => projects.filter((project) => project.id !== task.projectId),
@@ -60,7 +60,10 @@ export default function TaskMovePopover({
     [destinationProjects, selectedProjectId],
   );
 
-  const destinationColumns = destinationProject?.columns ?? [];
+  const destinationColumns = destinationColumnRows.map((column) => ({
+    ...column,
+    id: column.slug,
+  }));
   const destinationStatuses = [
     ...destinationColumns,
     ...VIRTUAL_TASK_STATUSES.map((status) => ({
@@ -75,15 +78,21 @@ export default function TaskMovePopover({
     (status) => status.value === task.status,
   );
   const fallbackStatus = destinationColumns[0]?.id ?? "";
-  const effectiveStatus = canKeepCurrentStatus || canKeepCurrentVirtualStatus
-    ? task.status
-    : selectedStatus || fallbackStatus;
+  const effectiveStatus =
+    canKeepCurrentStatus || canKeepCurrentVirtualStatus
+      ? task.status
+      : selectedStatus || fallbackStatus;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: memo kept as deployed; recomputing on every render is accepted here
   const selectedStatusLabel = useMemo(() => {
     if (!effectiveStatus || destinationColumns.length === 0) return null;
     const column = destinationStatuses.find((c) => c.id === effectiveStatus);
     return column?.name || getStatusLabel(effectiveStatus) || null;
-  }, [destinationStatuses, effectiveStatus]);
+  }, [
+    // biome-ignore lint/correctness/useExhaustiveDependencies: dependency kept as deployed; recomputing the label each render is cheap
+    destinationStatuses,
+    effectiveStatus,
+  ]);
 
   useEffect(() => {
     if (!open) {
@@ -120,6 +129,7 @@ export default function TaskMovePopover({
         taskId: task.id,
         destinationProjectId: selectedProjectId,
         destinationStatus: effectiveStatus,
+        expectedVersion: task.version,
       });
 
       setOpen(false);

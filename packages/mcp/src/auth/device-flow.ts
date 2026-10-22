@@ -1,3 +1,6 @@
+import { currentOperation, operationSignal } from "../kaneo/operation.js";
+import { requestText } from "../kaneo/request.js";
+
 export type DeviceCodeResponse = {
   device_code: string;
   user_code: string;
@@ -15,7 +18,19 @@ export type DeviceTokenErrorBody = {
 const REQUEST_TIMEOUT_MS = 10_000;
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+  const signal = currentOperation()?.signal;
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, ms);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
 }
 
 function isAbortError(err: unknown): boolean {
@@ -33,13 +48,14 @@ async function fetchWithTimeout(
   init: RequestInit,
   timeoutMs = REQUEST_TIMEOUT_MS,
 ): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(input, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
+  const { response, text } = await requestText(input, {
+    ...init,
+    signal: operationSignal(timeoutMs),
+  });
+  return new Response(text, {
+    status: response.status,
+    headers: response.headers,
+  });
 }
 
 export async function requestDeviceCode(
@@ -126,8 +142,9 @@ export async function pollDeviceAccessToken(
   let intervalMs = Math.max(1000, initialIntervalSec * 1000);
 
   for (let attempt = 0; Date.now() - started < maxWait; attempt++) {
+    currentOperation()?.signal.throwIfAborted();
     if (attempt > 0) {
-      await sleep(intervalMs);
+      await sleep(Math.min(intervalMs, maxWait - (Date.now() - started)));
       if (Date.now() - started >= maxWait) {
         break;
       }
@@ -135,15 +152,22 @@ export async function pollDeviceAccessToken(
 
     let res: Response;
     try {
-      res = await fetchWithTimeout(`${baseUrl}/api/auth/device/token`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
-          device_code: deviceCode,
-          client_id: clientId,
-        }),
-      });
+      res = await fetchWithTimeout(
+        `${baseUrl}/api/auth/device/token`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+            device_code: deviceCode,
+            client_id: clientId,
+          }),
+        },
+        Math.max(
+          1,
+          Math.min(REQUEST_TIMEOUT_MS, maxWait - (Date.now() - started)),
+        ),
+      );
     } catch (err) {
       if (isAbortError(err)) {
         log("Device token poll request timed out; retrying.");

@@ -34,6 +34,7 @@ function useCreateTask() {
         strategyHorizons,
       ),
     onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks", "my"] });
       void queryClient.invalidateQueries({
         queryKey: ["tasks", variables.projectId],
       });

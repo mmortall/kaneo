@@ -1,10 +1,12 @@
 import { eq } from "drizzle-orm";
 import db from "../../../database";
-import { labelTable, taskTable } from "../../../database/schema";
+import { taskTable } from "../../../database/schema";
 import { publishEvent } from "../../../events";
+import applyProviderLabelEvent from "../../../label/controllers/apply-provider-label-event";
 import { findExternalLink } from "../services/link-manager";
 import {
   findAllIntegrationsByRepo,
+  updateTaskPriority,
   updateTaskStatus,
 } from "../services/task-service";
 import {
@@ -51,10 +53,7 @@ export async function handleIssueLabeled(payload: IssueLabeledPayload) {
     const status = extractIssueStatus(issue.labels);
 
     if (priority) {
-      await db
-        .update(taskTable)
-        .set({ priority })
-        .where(eq(taskTable.id, existingLink.taskId));
+      await updateTaskPriority(existingLink.taskId, priority);
     }
 
     if (status) {
@@ -88,53 +87,21 @@ export async function handleIssueLabeled(payload: IssueLabeledPayload) {
       return;
     }
 
-    if (payload.action === "labeled") {
+    if (payload.action === "labeled" || payload.action === "unlabeled") {
       const task = await db.query.taskTable.findFirst({
         where: eq(taskTable.id, existingLink.taskId),
-        with: {
-          project: true,
-        },
+        with: { project: true },
       });
-
-      if (task?.project?.workspaceId) {
-        const existingLabel = await db.query.labelTable.findFirst({
-          where: (table, { and, eq }) =>
-            and(
-              eq(table.workspaceId, task.project.workspaceId),
-              eq(table.name, addedLabel.name),
-              eq(table.taskId, task.id),
-            ),
-        });
-
-        if (!existingLabel) {
-          const color = addedLabel.color ? `#${addedLabel.color}` : "#6B7280";
-          await db
-            .insert(labelTable)
-            .values({
-              name: addedLabel.name,
-              color,
-              taskId: task.id,
-              workspaceId: task.project.workspaceId,
-            })
-            .onConflictDoNothing({
-              target: [labelTable.taskId, labelTable.name],
-            });
-        }
-      }
-    }
-
-    if (payload.action === "unlabeled") {
-      const labelsToDelete = await db.query.labelTable.findMany({
-        where: (table, { and, eq }) =>
-          and(
-            eq(table.taskId, existingLink.taskId),
-            eq(table.name, addedLabel.name),
-          ),
-      });
-
-      for (const label of labelsToDelete) {
-        await db.delete(labelTable).where(eq(labelTable.id, label.id));
-      }
+      if (task?.project?.workspaceId)
+        await applyProviderLabelEvent(
+          task.id,
+          task.project.workspaceId,
+          {
+            name: addedLabel.name,
+            color: addedLabel.color ? `#${addedLabel.color}` : "#6B7280",
+          },
+          payload.action === "labeled" ? "add" : "remove",
+        );
     }
 
     return;

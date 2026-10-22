@@ -37,3 +37,8 @@ onlyBuiltDependencies:
   - bcrypt
   - better-sqlite3
   - esbuild
+allowBuilds:
+  '@prisma/engines': set this to true or false
+  esbuild: set this to true or false
+  msw: set this to true or false
+  prisma: set this to true or false

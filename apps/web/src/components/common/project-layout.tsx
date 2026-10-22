@@ -1,6 +1,7 @@
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import { CalendarDays, SquareKanban, SquircleDashed } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import DeletionRecoveryPanel from "@/components/common/deletion-recovery-panel";
 import MobileProjectNav from "@/components/common/header/mobile-project-nav";
 import ProjectCrumbSelect from "@/components/common/header/project-crumb-select";
 import WorkspaceCrumbSelect from "@/components/common/header/workspace-crumb-select";
@@ -188,7 +189,12 @@ export default function ProjectLayout({
         </div>
       </Layout.Header>
 
-      <Layout.Content>{children}</Layout.Content>
+      <Layout.Content>
+        <div className="flex h-full min-h-0 flex-col">
+          <DeletionRecoveryPanel key={projectId} projectId={projectId} />
+          <div className="min-h-0 flex-1">{children}</div>
+        </div>
+      </Layout.Content>
 
       <CreateProjectModal
         open={isCreateProjectModalOpen}

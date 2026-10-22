@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { HTTPException } from "hono/http-exception";
 import db from "../../database";
 import { taskReminderSentTable, taskTable } from "../../database/schema";
 import { publishEvent } from "../../events";
-import { assertTaskMutationAllowed } from "../task-workflow-policy";
+import assertFieldMutationPolicy from "./assert-field-mutation-policy";
 
 async function updateTaskDueDate({
   id,
@@ -26,24 +26,26 @@ async function updateTaskDueDate({
     });
   }
 
-  assertTaskMutationAllowed({ caller, existing: existingTask });
+  await assertFieldMutationPolicy(existingTask, caller);
 
-  // Clear sent reminders so new due date triggers fresh notifications
-  await db
-    .delete(taskReminderSentTable)
-    .where(eq(taskReminderSentTable.taskId, id));
-
-  const [updatedTask] = await db
-    .update(taskTable)
-    .set({ dueDate: dueDate || null })
-    .where(eq(taskTable.id, id))
-    .returning();
-
-  if (!updatedTask) {
-    throw new HTTPException(500, {
-      message: "Failed to update task due date",
-    });
-  }
+  const updatedTask = await db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(taskTable)
+      .set({ dueDate: dueDate || null })
+      .where(
+        and(eq(taskTable.id, id), eq(taskTable.version, existingTask.version)),
+      )
+      .returning();
+    if (!updated)
+      throw new HTTPException(409, {
+        message: "Task changed during validation; reload before retrying",
+      });
+    // Clear reminders only when the new date commits.
+    await tx
+      .delete(taskReminderSentTable)
+      .where(eq(taskReminderSentTable.taskId, id));
+    return updated;
+  });
 
   await publishEvent("task.due_date_changed", {
     taskId: updatedTask.id,

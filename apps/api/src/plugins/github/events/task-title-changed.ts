@@ -2,7 +2,7 @@ import type { PluginContext, TaskTitleChangedEvent } from "../../types";
 import type { GitHubConfig } from "../config";
 import {
   findExternalLinksByTask,
-  updateExternalLink,
+  recordExternalLinkFieldSync,
 } from "../services/link-manager";
 import { getGithubApp, getInstallationIdForRepo } from "../utils/github-app";
 
@@ -43,16 +43,6 @@ export async function handleTaskTitleChanged(
         console.log("Skipping title sync - already synced from GitHub");
         return;
       }
-
-      // Skip if recent sync (within 2 seconds) to prevent rapid loops
-      const timeSinceLastSync =
-        Date.now() - new Date(lastTitleSync.timestamp).getTime();
-      if (timeSinceLastSync < 2000) {
-        console.log(
-          `Skipping title sync - recent sync detected (${timeSinceLastSync}ms ago)`,
-        );
-        return;
-      }
     }
 
     let installationId = config.installationId;
@@ -74,19 +64,13 @@ export async function handleTaskTitleChanged(
     });
 
     // Update metadata to track this sync
-    await updateExternalLink(issueLink.id, {
-      title: event.newTitle,
-      metadata: {
-        ...metadata,
-        lastSync: {
-          ...metadata.lastSync,
-          title: {
-            timestamp: new Date().toISOString(),
-            source: "kaneo",
-            value: event.newTitle,
-          },
-        },
-      },
+    await recordExternalLinkFieldSync({
+      linkId: issueLink.id,
+      taskId: event.taskId,
+      integrationId: context.integrationId,
+      externalId: issueLink.externalId,
+      field: "title",
+      value: event.newTitle,
     });
 
     console.log(`Synced task title to GitHub issue #${issueNumber}`);

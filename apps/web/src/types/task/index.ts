@@ -33,7 +33,9 @@ export const TASK_HORIZONS = [
 export type TaskHorizon = (typeof TASK_HORIZONS)[number];
 
 type Task = {
+  isSummary?: true;
   id: string;
+  version?: number;
   title: string;
   number: number | null;
   description: string | null;

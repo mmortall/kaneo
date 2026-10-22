@@ -76,12 +76,14 @@ async function updateTaskStatus({
   const [updatedTask] = await db
     .update(taskTable)
     .set({ status, columnId: column?.id ?? null, ...workflowFields })
-    .where(eq(taskTable.id, id))
+    .where(
+      and(eq(taskTable.id, id), eq(taskTable.version, existingTask.version)),
+    )
     .returning();
 
   if (!updatedTask) {
-    throw new HTTPException(500, {
-      message: "Failed to update task status",
+    throw new HTTPException(409, {
+      message: "Task changed during status validation; reload before retrying",
     });
   }
 

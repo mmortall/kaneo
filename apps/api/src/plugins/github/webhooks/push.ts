@@ -4,7 +4,6 @@ import { createOrUpdateExternalLink } from "../services/link-manager";
 import {
   findAllIntegrationsByRepo,
   findTaskByNumber,
-  isTaskInFinalState,
   updateTaskStatus,
 } from "../services/task-service";
 import { extractTaskNumberFromBranch } from "../utils/branch-matcher";
@@ -129,30 +128,24 @@ export async function handlePush(payload: PushPayload) {
       `[Push] Target status: ${targetStatus}, current: ${task.status}`,
     );
 
-    const isTaskFinal = await isTaskInFinalState(task);
-
-    if (task.status !== targetStatus && !isTaskFinal) {
-      console.log(
-        `[Push] Updating task ${task.id} status from ${task.status} to ${targetStatus}`,
-      );
-      const statusResult = await updateTaskStatus(task.id, targetStatus);
-      if (
-        statusResult.applied &&
-        statusResult.before.status !== statusResult.after.status
-      ) {
-        await publishEvent("task.status_changed", {
-          taskId: statusResult.after.id,
-          projectId: statusResult.after.projectId,
-          userId: null,
-          oldStatus: statusResult.before.status,
-          newStatus: statusResult.after.status,
-          title: statusResult.after.title,
-          assigneeId: statusResult.after.userId,
-          type: "status_changed",
-        });
-      }
-    } else {
-      console.log(`[Push] Skipping status update - already ${task.status}`);
+    const statusResult = await updateTaskStatus(task.id, targetStatus, {
+      onlyIfNotFinal: true,
+      expectedProjectId: integration.projectId,
+    });
+    if (
+      statusResult.applied &&
+      statusResult.before.status !== statusResult.after.status
+    ) {
+      await publishEvent("task.status_changed", {
+        taskId: statusResult.after.id,
+        projectId: statusResult.after.projectId,
+        userId: null,
+        oldStatus: statusResult.before.status,
+        newStatus: statusResult.after.status,
+        title: statusResult.after.title,
+        assigneeId: statusResult.after.userId,
+        type: "status_changed",
+      });
     }
 
     return;

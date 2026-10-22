@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import deleteLabel from "@/fetchers/label/delete-label";
+import invalidateLabelTaskCaches from "./invalidate-label-task-caches";
 import { removeLabelFromTaskInTasksCache } from "./sync-task-labels-cache";
 
 function useDeleteLabel() {
@@ -7,6 +8,8 @@ function useDeleteLabel() {
 
   return useMutation({
     mutationFn: deleteLabel,
+    retry: false,
+    onSettled: () => invalidateLabelTaskCaches(queryClient),
     onSuccess: (deletedLabel) => {
       queryClient.setQueryData(
         ["labels", deletedLabel.workspaceId],
@@ -27,23 +30,6 @@ function useDeleteLabel() {
           deletedLabel.taskId,
           deletedLabel.id,
         );
-      }
-
-      void queryClient.invalidateQueries({
-        queryKey: ["labels", deletedLabel.workspaceId],
-      });
-
-      if (deletedLabel.taskId) {
-        void queryClient.invalidateQueries({
-          queryKey: ["labels", deletedLabel.taskId],
-        });
-      } else {
-        void queryClient.invalidateQueries({
-          queryKey: ["labels"],
-        });
-        void queryClient.invalidateQueries({
-          queryKey: ["tasks"],
-        });
       }
     },
   });

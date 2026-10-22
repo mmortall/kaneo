@@ -1,11 +1,11 @@
 {
-  "schema_version": "1.0",
-  "space_id": "repo:system:kaneo-fork",
-  "workspace_id": "bgFFdsIlLqTM8smsbBOB68pRwzViwxTH",
-  "project_id": "eh55y7tmkxku5jmjta2y513z",
-  "project_name": "Kaneo Fork",
-  "api_endpoint": "https://admin.polyquantlabs.xyz/kaneo/api",
-  "default_area": "product-evolution",
-  "epic_key": "epic:repo:system:kaneo-fork",
-  "epic_title": "Epic: Kaneo Fork product evolution"
+	"schema_version": "1.0",
+	"space_id": "repo:system:kaneo-fork",
+	"workspace_id": "bgFFdsIlLqTM8smsbBOB68pRwzViwxTH",
+	"project_id": "eh55y7tmkxku5jmjta2y513z",
+	"project_name": "Kaneo Fork",
+	"api_endpoint": "https://admin.polyquantlabs.xyz/kaneo/api",
+	"default_area": "product-evolution",
+	"epic_key": "epic:repo:system:kaneo-fork",
+	"epic_title": "Epic: Kaneo Fork product evolution"
 }

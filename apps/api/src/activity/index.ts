@@ -105,7 +105,12 @@ const activity = new Hono<{
     async (c) => {
       const { taskId, comment } = c.req.valid("json");
       const userId = c.get("userId");
-      const newComment = await createComment(taskId, userId, comment);
+      const newComment = await createComment(
+        taskId,
+        userId,
+        comment,
+        c.req.header("Idempotency-Key"),
+      );
 
       return c.json(newComment);
     },
@@ -221,11 +226,19 @@ subscribeToEvent<{
   title: string;
   assigneeId?: string;
   type: string;
+  operationKey?: string;
 }>("task.status_changed", async (data) => {
-  await createActivity(data.taskId, data.type, data.userId, null, {
-    oldStatus: data.oldStatus,
-    newStatus: data.newStatus,
-  });
+  await createActivity(
+    data.taskId,
+    data.type,
+    data.userId,
+    null,
+    {
+      oldStatus: data.oldStatus,
+      newStatus: data.newStatus,
+    },
+    data.operationKey ? `group-activity:${data.operationKey}` : undefined,
+  );
 });
 
 subscribeToEvent<{

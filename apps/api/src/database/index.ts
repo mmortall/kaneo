@@ -1,6 +1,7 @@
 import { config } from "dotenv-mono";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
+import { beginDatabaseAcquire, recordDatabaseQuery } from "../performance";
 import {
   accountTableRelations,
   activityTableRelations,
@@ -145,6 +146,31 @@ export function getDatabasePool(): Pool {
       idleTimeoutMillis: 30_000,
       max: 10,
     });
+    const connect = pool.connect.bind(pool);
+    pool.connect = ((
+      callback?: (
+        error: Error | undefined,
+        client: PoolClient | undefined,
+        release: (error?: Error | boolean) => void,
+      ) => void,
+    ) => {
+      const finish = beginDatabaseAcquire();
+      if (callback)
+        return connect((error, client, release) => {
+          finish();
+          callback(error, client, release);
+        });
+      return connect().then(
+        (client) => {
+          finish();
+          return client;
+        },
+        (error) => {
+          finish();
+          throw error;
+        },
+      );
+    }) as Pool["connect"];
   }
 
   return pool;
@@ -154,6 +180,7 @@ export function getDatabase(): DatabaseInstance {
   if (!dbInstance) {
     dbInstance = drizzle(getDatabasePool(), {
       schema,
+      logger: { logQuery: recordDatabaseQuery },
     });
   }
 

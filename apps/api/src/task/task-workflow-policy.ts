@@ -140,15 +140,17 @@ export function assertTaskWorkflowPolicy({
 export function assertTaskMutationAllowed({
   caller,
   existing,
+  isFinalStatus = existing.status === "done",
 }: {
   caller?: string;
   existing: ExistingTaskWorkflowFields;
+  isFinalStatus?: boolean;
 }) {
   assertTaskWorkflowPolicy({
     isAiCaller: isAiTaskCaller(caller),
     existing,
     nextStatus: existing.status,
-    isFinalStatus: existing.status === "done",
+    isFinalStatus,
     fields: existing,
   });
 }
