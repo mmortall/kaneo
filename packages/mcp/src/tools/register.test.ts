@@ -299,6 +299,23 @@ describe("registerTools", () => {
     expect(result?.isError).toBe(false);
   });
 
+  it("whoami returns the user without the session token", async () => {
+    const { server, tools } = createServerMock();
+    const client = {
+      json: vi.fn().mockResolvedValue({
+        session: { token: "secret-session-token" },
+        user: { id: "u1", name: "Ann", email: "ann@example.com", role: null },
+      }),
+    };
+
+    registerTools(server as never, { client: client as never });
+
+    const result = await tools.get("whoami")?.handler({});
+
+    expect(JSON.stringify(result)).not.toContain("secret-session-token");
+    expect(JSON.stringify(result)).toContain("ann@example.com");
+  });
+
   it("returns an MCP error result when the client request fails", async () => {
     const { server, tools } = createServerMock();
     const client = {

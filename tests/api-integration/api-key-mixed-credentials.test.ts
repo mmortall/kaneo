@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { auth } from "../../apps/api/src/auth";
 import db, { schema } from "../../apps/api/src/database";
 import { createApp } from "../../apps/api/src/index";
@@ -49,15 +49,17 @@ describe("API integration: API key sent with an invalid bearer token", () => {
     const key = await createKey(user.id);
     const { app } = createApp();
 
-    const keyOnly = await app.request("/api/admin/users", {
+    // An API key alone must not resolve to the key owner's session (and its token).
+    const keyOnly = await app.request("/api/auth/get-session", {
       headers: { "x-api-key": key },
     });
-    expect(keyOnly.status).toBe(403);
+    expect(keyOnly.status).toBe(200);
+    expect(await keyOnly.json()).toBeNull();
 
-    const mixed = await app.request("/api/admin/users", {
+    const mixed = await app.request("/api/auth/get-session", {
       headers: { "x-api-key": key, ...invalidBearer },
     });
-    expect(mixed.status).toBe(401);
+    expect(await mixed.json()).toBeNull();
   });
 
   it("keeps the API key scope", async () => {

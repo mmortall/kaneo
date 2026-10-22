@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { KaneoClient } from "../kaneo/client.js";
 import { boundedRegistrar, KaneoRequestError } from "../kaneo/operation.js";
 import { errorResult, textResult } from "../utils/mcp-result.js";
+import { getCurrentUser } from "./get-current-user.js";
 
 const prioritySchema = z.enum([
   "no-priority",
@@ -61,12 +62,10 @@ export function registerTools(
   registerTool(
     "whoami",
     {
-      description:
-        "Return the current Kaneo session and user for the cached device token.",
+      description: "Return the current Kaneo user for the cached device token.",
       inputSchema: z.object({}),
     },
-    async () =>
-      run(() => client.json("/api/auth/get-session", { method: "GET" })),
+    async () => run(() => getCurrentUser(client)),
   );
 
   registerTool(

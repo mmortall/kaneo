@@ -34,20 +34,36 @@ export async function hasLockedWorkspacePermission(
     )
     .for("share");
   if (!member) return false;
-  const [role] = await database
-    .select({ permission: schema.workspaceRoleTable.permission })
-    .from(schema.workspaceRoleTable)
-    .where(
-      and(
-        eq(schema.workspaceRoleTable.workspaceId, workspaceId),
-        eq(schema.workspaceRoleTable.role, member.role),
-      ),
-    )
-    .for("share");
-  const statements = role
-    ? parsePermissionStatements(role.permission)
-    : builtInRoleStatements(member.role);
-  return Boolean(statements && satisfies(statements, permissions));
+  for (const name of splitRoles(member.role)) {
+    const [role] = await database
+      .select({ permission: schema.workspaceRoleTable.permission })
+      .from(schema.workspaceRoleTable)
+      .where(
+        and(
+          eq(schema.workspaceRoleTable.workspaceId, workspaceId),
+          eq(schema.workspaceRoleTable.role, name),
+        ),
+      )
+      .for("share");
+    const statements = role
+      ? parsePermissionStatements(role.permission)
+      : builtInRoleStatements(name);
+    if (statements && satisfies(statements, permissions)) return true;
+  }
+  return false;
+}
+
+/** Better Auth stores several roles comma-separated; any one of them may grant access. */
+function splitRoles(role: string | null | undefined): string[] {
+  if (typeof role !== "string") return [];
+  return [
+    ...new Set(
+      role
+        .split(",")
+        .map((name) => name.trim())
+        .filter(Boolean),
+    ),
+  ];
 }
 
 function builtInRoleStatements(
@@ -167,11 +183,13 @@ export async function hasWorkspacePermission(
   // viewer/member/admin users from a 403 if their workspace somehow
   // missed the seed (e.g., seed failed during workspace creation and
   // the boot-time backfill hasn't run yet).
-  const statements =
-    (await customRoleStatements(workspaceId, member.role)) ??
-    builtInRoleStatements(member.role);
-
-  return Boolean(statements && satisfies(statements, permissions));
+  for (const name of splitRoles(member.role)) {
+    const statements =
+      (await customRoleStatements(workspaceId, name)) ??
+      builtInRoleStatements(name);
+    if (statements && satisfies(statements, permissions)) return true;
+  }
+  return false;
 }
 
 export function requireWorkspacePermission(permissions: PermissionMap) {
